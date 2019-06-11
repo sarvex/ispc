@@ -1,0 +1,1675 @@
+#  Copyright (c) 2018-2020, Intel Corporation
+#  All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are
+#  met:
+#
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
+#
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#
+#    * Neither the name of Intel Corporation nor the names of its
+#      contributors may be used to endorse or promote products derived from
+#      this software without specific prior written permission.
+#
+#
+#   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+#   IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+#   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+#   PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+#   OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+#   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+#   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+#   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+#   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+#   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+#   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+variables:
+  PROJECT_NAME: "ISPC"
+  GIT_SUBMODULE_STRATEGY: recursive
+  GET_SOURCES_ATTEMPTS: 10
+  ARTIFACT_DOWNLOAD_ATTEMPTS: 10
+  EXECUTOR_JOB_SECTION_ATTEMPTS: 3
+
+stages:
+  - build
+  - test-generic
+  - test-gen9
+  - test-gen12
+  - test-presi
+  - test-deps
+  - deploy
+  - others
+
+default:
+  # Default image is Open Source version
+  # to use internal must be specified for each job separately.
+  image: $DOCKER_REGISTRY/gen:$DEPENDENCIES_PIPELINE_ID_OS
+  retry:
+    max: 2
+    when:
+      - unknown_failure
+      - api_failure
+      - runner_system_failure
+      - scheduler_failure
+
+# Set default rule for workload to not run separate pipeline for MR
+# It's solution/WA for https://gitlab.com/gitlab-org/gitlab/-/issues/34756
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - when: always
+
+.deps-master-int-job:
+  image: $DOCKER_REGISTRY/gen-int:$DEPENDENCIES_PIPELINE_ID_INT
+  rules:
+    # not triggered by ispc-deps
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+    - if: '$DEPENDENCIES_FLOW_NAME == "master-int"'
+
+.deps-master-os-job:
+  image: $DOCKER_REGISTRY/gen-os:$DEPENDENCIES_PIPELINE_ID_OS_INT
+  rules:
+    # not triggered by ispc-deps
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+    - if: '$DEPENDENCIES_FLOW_NAME == "master-os"'
+
+.deps-master-job:
+  rules:
+    # not triggered by ispc-deps
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+    - if: '$DEPENDENCIES_FLOW_NAME == "master"'
+
+.no-deps-job:
+  rules:
+    # not triggered by ispc-deps
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+
+# Gitlab is not able to merge rules together
+# so unfortunately we have to copy paste rules
+# if we want to combine them.
+.full-deps-master-int-job:
+  image: $DOCKER_REGISTRY/gen-int:$DEPENDENCIES_PIPELINE_ID_INT
+  rules:
+    - if: '$FULL_TESTING == "1" && $DEPENDENCIES_FLOW_NAME == "-"'
+      when: always
+    - if: '$FULL_TESTING == "1" && $DEPENDENCIES_FLOW_NAME == "master-int"'
+      when: always
+    - if: '$FULL_TESTING != "1" && $DEPENDENCIES_FLOW_NAME == "-"'
+      when: manual
+      allow_failure: true
+    - if: '$FULL_TESTING != "1" && $DEPENDENCIES_FLOW_NAME == "master-int"'
+      when: manual
+      allow_failure: true
+
+.full-deps-master-os-job:
+  image: $DOCKER_REGISTRY/gen-os:$DEPENDENCIES_PIPELINE_ID_OS_INT
+  rules:
+    - if: '$FULL_TESTING == "1" && $DEPENDENCIES_FLOW_NAME == "-"'
+      when: always
+    - if: '$FULL_TESTING == "1" && $DEPENDENCIES_FLOW_NAME == "master-os"'
+      when: always
+    - if: '$FULL_TESTING != "1" && $DEPENDENCIES_FLOW_NAME == "-"'
+      when: manual
+      allow_failure: true
+    - if: '$FULL_TESTING != "1" && $DEPENDENCIES_FLOW_NAME == "master-os"'
+      when: manual
+      allow_failure: true
+
+.docker-in-docker:
+  tags: [build, docker-in-docker]
+  before_script:
+    - mkdir -p .docker/ && echo $DOCKER_AUTH_CONFIG > .docker/config.json && export DOCKER_CONFIG=`pwd`/.docker
+
+ipldt:
+  tags: [linux, ipldt]
+  stage: test-generic
+  needs: []
+  script:
+   - /tools/ipldt/ipldt3_lin_intel64/ipldt3_lin_intel64 -i $CI_PROJECT_DIR --r $CI_PROJECT_DIR/ipldt-results || true
+  artifacts:
+    paths:
+      - ipldt-results/
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+      when: manual
+      allow_failure: true
+
+win-build:
+  extends: [.deps-master-job]
+  tags: [windows, build]
+  stage: build
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\build-ispc.bat OFF %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS%
+  artifacts:
+    name: ispc
+    paths:
+      - build/install
+
+win-build-int:
+  extends: [.deps-master-int-job]
+  tags: [windows, build]
+  stage: build
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\build-ispc.bat ON %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+  artifacts:
+    name: ispc
+    paths:
+      - build/install
+
+win-examples-separate-build-int-dg2:
+  extends: [.full-deps-master-int-job]
+  tags: [windows, hw, dg2]
+  stage: test-gen12
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\run-examples.bat %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+
+
+win-examples-separate-build:
+  extends: [.deps-master-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\run-examples.bat %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS%
+
+win-examples-separate-build-int:
+  extends: [.deps-master-int-job]
+  needs: [win-build-int]
+  tags: [windows, gen9]
+  stage: test-gen9
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\run-examples.bat %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+
+win-examples-separate-build-tgllp:
+  extends: [.deps-master-job]
+  needs: [win-build]
+  tags: [windows, tgllp]
+  stage: test-gen12
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\run-examples.bat %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS%
+
+win-examples-separate-build-int-tgllp:
+  extends: [.deps-master-int-job]
+  tags: [windows, tgllp]
+  stage: test-gen12
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\run-examples.bat %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+
+win-test-simd8:
+  extends: [.deps-master-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x8 spv fail_db.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS%
+  after_script:
+   - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd16:
+  extends: [.deps-master-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x16 spv fail_db.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS%
+  after_script:
+   - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd8-zebin:
+  extends: [.deps-master-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x8 ze fail_db.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS%
+  after_script:
+   - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd16-zebin:
+  extends: [.deps-master-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x16 ze fail_db.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS%
+  after_script:
+   - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd8-int-dg2:
+  extends: [.full-deps-master-int-job]
+  tags: [windows, hw, dg2]
+  stage: test-gen12
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat xehpg-x8 spv .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT% dg2
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd16-int-dg2:
+  extends: [.full-deps-master-int-job]
+  tags: [windows, hw, dg2]
+  stage: test-gen12
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat xehpg-x16 spv .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT% dg2
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd8-int:
+  extends: [.deps-master-int-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x8 spv .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd16-int:
+  extends: [.deps-master-int-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x16 spv .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd8-zebin-int:
+  extends: [.deps-master-int-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x8 ze .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd16-zebin-int:
+  extends: [.deps-master-int-job]
+  tags: [windows, gen9]
+  stage: test-gen9
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat gen9-x16 ze .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT%
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd8-tgllp:
+  extends: [.deps-master-job]
+  tags: [windows, tgllp]
+  stage: test-gen12
+  needs: [win-build]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat xelp-x8 spv fail_db.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS% tgllp
+  after_script:
+   - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd16-tgllp:
+  extends: [.deps-master-job]
+  tags: [windows, tgllp]
+  stage: test-gen12
+  needs: [win-build]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat xelp-x16 spv fail_db.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_OS% tgllp
+  after_script:
+   - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd8-int-tgllp:
+  extends: [.deps-master-int-job]
+  tags: [windows, tgllp]
+  stage: test-gen12
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat xelp-x8 spv .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT% tgllp
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+win-test-simd16-int-tgllp:
+  extends: [.deps-master-int-job]
+  tags: [windows, tgllp]
+  stage: test-gen12
+  needs: [win-build-int]
+  script:
+   - .gitlab\run-vs-win-cmd.bat .gitlab\test-ispc.bat xelp-x16 spv .gitlab\fail_db-int.txt %ARTIFACTORY_ISPC_URL%/ispc-deps/%DEPENDENCIES_PIPELINE_ID_INT% tgllp
+  after_script:
+   - git diff .gitlab\fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+      - igxpin.log
+    when: always
+
+linux-build:
+  extends: [.deps-master-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DXE_ENABLED=ON -DISPC_INCLUDE_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=OFF -DXE_DEPS_DIR=/home/deps ../
+   - make install -j8
+   - make check-all -j8
+  artifacts:
+    name: ispc
+    paths:
+      - build/install
+      - build/tests
+      - build/xpu_examples/src/ispc_xpu_examples-build/
+      - build/benchmarks/vendor/google/benchmark/src
+
+linux-build-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - cd $CI_PROJECT_DIR
+   - mkdir build && cd build
+   - cmake -DXE_ENABLED=ON -DISPC_INCLUDE_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=ON -DXE_DEPS_DIR=/home/deps ../
+   - make install -j8
+   - make check-all -j8
+  artifacts:
+    name: ispc
+    paths:
+      - build/install
+      - build/xpu_examples/src/ispc_xpu_examples-build/
+      - build/benchmarks/vendor/google/benchmark/src
+
+linux-build-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DXE_ENABLED=ON -DISPC_INCLUDE_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=OFF -DXE_DEPS_DIR=/home/deps ../
+   - make install -j8
+   - make check-all -j8
+  artifacts:
+    name: ispc
+    paths:
+      - build/install
+      - build/xpu_examples/src/ispc_xpu_examples-build/
+      - build/benchmarks/vendor/google/benchmark/src
+
+
+linux-package:
+  extends: [.deps-master-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DXE_ENABLED=ON -DISPC_PREPARE_PACKAGE=ON -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=OFF -DXE_DEPS_DIR=/home/deps ../
+   - make package -j8
+  artifacts:
+    name: ispc
+    paths:
+      - build/ispc-*.tar.gz
+
+linux-package-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DXE_ENABLED=ON -DISPC_PREPARE_PACKAGE=ON -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=ON -DXE_DEPS_DIR=/home/deps ../
+   - make package -j8
+  artifacts:
+    name: ispc
+    paths:
+      - build/ispc-*.tar.gz
+
+linux-ispcrt-separate-build-default:
+  extends: [.deps-master-int-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - cd ispcrt
+   - mkdir build && cd build
+   - cmake -DCMAKE_INSTALL_PREFIX=install -DXE_ENABLED=ON -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ../
+   - make install -j8
+  artifacts:
+    name: ispcrt
+    paths:
+      - ispcrt/build/install
+
+linux-ispcrt-separate-build-tbb:
+  extends: [.deps-master-int-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - cd ispcrt
+   - mkdir build && cd build
+   - cmake -DCMAKE_INSTALL_PREFIX=install -DISPCRT_BUILD_TASK_MODEL=TBB -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ../
+   - make install -j8
+  artifacts:
+    name: ispcrt
+    paths:
+      - ispcrt/build/install
+
+linux-ispcrt-separate-build-thread:
+  extends: [.deps-master-int-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - cd ispcrt
+   - mkdir build && cd build
+   - cmake -DCMAKE_INSTALL_PREFIX=install -DISPCRT_BUILD_TASK_MODEL=Threads -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ../
+   - make install -j8
+  artifacts:
+    name: ispcrt
+    paths:
+      - ispcrt/build/install
+
+linux-ispcrt-separate-build-nothread:
+  extends: [.deps-master-int-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - cd ispcrt
+   - mkdir build && cd build
+   - cmake -DCMAKE_INSTALL_PREFIX=install -DISPCRT_BUILD_TASKING=OFF -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ../
+   - make install -j8
+  artifacts:
+    name: ispcrt
+    paths:
+      - ispcrt/build/install
+
+linux-build-debug:
+  extends: [.deps-master-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DISPC_INCLUDE_TESTS=OFF -DISPC_INCLUDE_EXAMPLES=OFF -DXE_ENABLED=ON -DISPC_INCLUDE_XE_EXAMPLES=OFF -DISPC_INCLUDE_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=OFF -DXE_DEPS_DIR=/home/deps ../
+   - make install -j8
+  artifacts:
+    name: ispc-debug
+    paths:
+      - build/install
+
+linux-build-debug-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DISPC_INCLUDE_TESTS=OFF -DISPC_INCLUDE_EXAMPLES=OFF -DXE_ENABLED=ON -DISPC_INCLUDE_XE_EXAMPLES=OFF -DISPC_INCLUDE_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=ON -DXE_DEPS_DIR=/home/deps ../
+   - make install -j8
+  artifacts:
+    name: ispc-debug
+    paths:
+      - build/install
+
+linux-build-debug-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DISPC_INCLUDE_TESTS=OFF -DISPC_INCLUDE_EXAMPLES=OFF -DXE_ENABLED=ON -DISPC_INCLUDE_XE_EXAMPLES=OFF -DISPC_INCLUDE_BENCHMARKS=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=OFF -DXE_DEPS_DIR=/home/deps ../
+   - make install -j8
+  artifacts:
+    name: ispc-debug
+    paths:
+      - build/install
+
+linux-build-cpu:
+  extends: [.no-deps-job]
+  tags: [docker, build]
+  stage: build
+  needs: []
+  script:
+   - mkdir build && cd build
+   - cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install ../
+   - make check-all -j8 && make install -j8
+  artifacts:
+    name: ispc
+    paths:
+      - build/install
+
+linux-build-coverage:
+  extends: [.no-deps-job]
+  tags: [docker, coverage]
+  stage: build
+  needs: []
+  script:
+   - export PATH=$PATH:/tools/BullseyeCoverage/bin
+   - cov01 -1
+   - cd $CI_PROJECT_DIR
+   - mkdir build && cd build
+   - cmake -DISPC_INCLUDE_TESTS=OFF -DXE_ENABLED=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install -D__INTEL_EMBARGO__=OFF -DXE_DEPS_DIR=/home/deps ../
+   - make install -j8
+  artifacts:
+    paths:
+    - build/
+
+linux-test-coverage:
+  extends: [.no-deps-job]
+  tags: [docker, coverage]
+  stage: test-generic
+  needs: [linux-build-coverage]
+  script:
+    - export PATH=`pwd`/build/bin/:/tools/BullseyeCoverage/bin:$PATH
+    - cov01 -1
+    - .gitlab/run-test-coverage.sh
+  artifacts:
+    paths:
+    - cov-report/
+    - cov-report-ispcrt/
+    - cov/total.cov
+    - cov/ispcrt/ispcrt-ut.cov
+  rules:
+    # not triggered by ispc-deps
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+      when: manual
+      allow_failure: true
+
+linux-process-kw:
+  extends: [.no-deps-job]
+  tags: [docker, klocwork]
+  stage: build
+  needs: []
+  script:
+   - .gitlab/build-kw.sh
+   - .gitlab/process-kw.sh
+  artifacts:
+    paths:
+    - kw_build_number
+
+linux-test-kw:
+  extends: [.no-deps-job]
+  tags: [docker, klocwork]
+  stage: test-generic
+  needs: [linux-process-kw]
+  script:
+   - .gitlab/test-kw.sh
+
+check-format:
+  extends: [.no-deps-job]
+  tags: [docker, linux, build]
+  stage: test-generic
+  needs: []
+  script:
+   - $CI_PROJECT_DIR/check_format.sh
+
+linux-examples-ispc-build:
+  extends: [.deps-master-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-examples-separate-build:
+  extends: [.deps-master-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd examples/xpu
+    - mkdir build && cd build
+    - cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ../
+    - make -j8
+    - ctest -C Release -V --timeout 30
+
+linux-examples-separate-build-dpcpp:
+  extends: [.deps-master-job]
+  image: $DOCKER_REGISTRY/gen-dpcpp:$DEPENDENCIES_PIPELINE_ID_OS
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - cd /opt/dpcpp_compiler
+    # startup.sh return exic code 1 because of
+    # /opt/dpcpp_compiler/lib/oclfpga/fpgavars.sh: No such file or directory
+    # so workaround it
+    - . ./startup.sh || true
+    - cd $CI_PROJECT_DIR
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd examples/xpu
+    - mkdir build && cd build
+    - cmake -DCMAKE_C_COMPILER=/opt/dpcpp_compiler/bin/clang -DCMAKE_CXX_COMPILER=/opt/dpcpp_compiler/bin/clang++ -DISPC_INCLUDE_DPCPP_EXAMPLES=ON ..
+    - make -j8
+    - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/dpcpp_compiler/lib/
+    - ctest -C Release -V --timeout 30
+
+linux-examples-separate-build-dpcpp-int:
+  extends: [.deps-master-int-job]
+  image: $DOCKER_REGISTRY/gen-int-dpcpp:$DEPENDENCIES_PIPELINE_ID_INT
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - cd /opt/dpcpp_compiler
+    # startup.sh return exic code 1 because of
+    # /opt/dpcpp_compiler/lib/oclfpga/fpgavars.sh: No such file or directory
+    # so workaround it
+    - . ./startup.sh || true
+    - cd $CI_PROJECT_DIR
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd examples/xpu
+    - mkdir build && cd build
+    - cmake -DCMAKE_C_COMPILER=/opt/dpcpp_compiler/bin/clang -DCMAKE_CXX_COMPILER=/opt/dpcpp_compiler/bin/clang++ -DISPC_INCLUDE_DPCPP_EXAMPLES=ON ..
+    - make -j8
+    - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/dpcpp_compiler/lib/
+    - ctest -C Release -V --timeout 30
+
+linux-examples-ispc-build-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-examples-separate-build-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd examples/xpu
+    - mkdir build && cd build
+    - cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ../
+    - make -j8
+    - ctest -C Release -V --timeout 30
+
+# Use GPU machines because L0 cannot initialize on a machine
+# without /dev/dri, even if using only null L0 driver
+linux-ispcrt-ut:
+  extends: [.deps-master-job]
+  tags: [docker, gpu]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/build/install/lib/:$CI_PROJECT_DIR/build/tests/:$LD_LIBRARY_PATH
+    - export ZE_ENABLE_NULL_DRIVER=1
+    - export ISPCRT_MOCK_DEVICE=y
+    - build/tests/ispcrt_mock_tests
+
+linux-examples-separate-build-zebin-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd examples/xpu
+    - mkdir build && cd build
+    - cmake -DISPC_XE_FORMAT=zebin -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang ../
+    - make -j8
+    - export ISPCRT_USE_ZEBIN=y
+    - export ISPC_EXAMPLES_USE_ZEBIN=y
+    - ctest -C Release -V --timeout 30
+
+linux-examples-ispc-build-tgllp-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, tgllp]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export ISPCRT_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-examples-ispc-build-dg2-hw-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, dg2, hw]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-examples-ispc-build-pvc-hw-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, pvc, hw]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+  allow_failure: true
+
+linux-examples-ispc-build-dg1-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, dg1]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export ISPC_GPU_DEVICE=$DG1_GPU_DEVICE
+    - export ISPCRT_GPU_DEVICE=$DG1_GPU_DEVICE
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-examples-ispc-build-tgllp:
+  extends: [.deps-master-job]
+  tags: [docker, tgllp]
+  stage: test-gen12
+  needs: [linux-build]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export ISPCRT_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-examples-ispc-build-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-examples-separate-build-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd examples/xpu
+    - mkdir build && cd build
+    - cmake ../
+    - make -j8
+    - ctest -C Release -V --timeout 30
+
+linux-examples-ispc-build-tgllp-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, tgllp]
+  stage: test-gen12
+  needs: [linux-build-os-int]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export ISPCRT_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - cd build/xpu_examples/src/ispc_xpu_examples-build/ && ctest -C Release -V --timeout 30
+
+linux-test-simd16:
+  extends: [.deps-master-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x16 --test_time 20
+  after_script:
+    - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8:
+  extends: [.deps-master-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x8 --test_time 20
+  after_script:
+    - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-O0:
+  extends: [.deps-master-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x16 -o O0 --test_time 20
+  after_script:
+    - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-O0:
+  extends: [.deps-master-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x8 -o O0 --test_time 20
+  after_script:
+    - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+
+linux-test-simd16-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x16 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x8 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-O0-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x16 -o O0 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-O0-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x8 -o O0 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+
+linux-test-debug_check-simd8-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP --debug_check -a xe64 -t gen9-x8 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  allow_failure: true
+
+linux-test-debug_check-simd16-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP --debug_check -a xe64 -t gen9-x16 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  needs: [linux-build-int]
+  allow_failure: true
+
+linux-test-simd16-pvc-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, fulsim, pvc]
+  stage: test-presi
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -j 10 --device=pvc -a xe64 -t xehpc-x16 --test_time 90 --fail_db=.gitlab/fail_db-int.txt --platform=pvc --fulsim=/tools/fulsim/PVC-$PVC_FULSIM_VER-Linux
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd32-pvc-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, fulsim, pvc]
+  stage: test-presi
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -j 10 --device=pvc -a xe64 -t xehpc-x32 --test_time 60 --fail_db=.gitlab/fail_db-int.txt --platform=pvc --fulsim=/tools/fulsim/PVC-$PVC_FULSIM_VER-Linux
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-dg2-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, fulsim, dg2]
+  stage: test-presi
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -j 10 --device=dg2 -a xe64 -t xehpg-x8 --test_time 90 --fail_db=.gitlab/fail_db-int.txt --platform=dg2 --fulsim=/tools/fulsim/DG2-$DG2_FULSIM_VER-Linux
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-dg2-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, fulsim, dg2]
+  stage: test-presi
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -j 10 --device=dg2 -a xe64 -t xehpg-x16 --test_time 90 --fail_db=.gitlab/fail_db-int.txt --platform=dg2 --fulsim=/tools/fulsim/DG2-$DG2_FULSIM_VER-Linux
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-mtl-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, fulsim]
+  stage: test-presi
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -j 10 --device=mtl -a xe64 -t xelpg-x8 --test_time 90 --fail_db=.gitlab/fail_db-int.txt --platform=mtl --fulsim=/tools/fulsim/MTL-$MTL_FULSIM_VER-Linux
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-mtl-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, fulsim]
+  stage: test-presi
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -j 10 --device=mtl -a xe64 -t xelpg-x16 --test_time 90 --fail_db=.gitlab/fail_db-int.txt --platform=mtl --fulsim=/tools/fulsim/MTL-$MTL_FULSIM_VER-Linux
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-zebin-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x16 --ispc_output=ze --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-zebin-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x8 --ispc_output=ze --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-tgllp-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, tgllp]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x16 --device=tgllp --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-tgllp-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, tgllp]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x8 --device=tgllp --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-dg2-hw-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, dg2, hw]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xehpg-x16 --device=dg2 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-dg2-hw-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, dg2, hw]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xehpg-x8 --device=dg2 --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-pvc-hw-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, linux, pvc, hw]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    # we need to keep -j low (still problems on some PVC machines when we try to run it without limits)
+    - ./run_tests.py -j 8 -u FP -a xe64 -t xehpc-x16 --device=pvc --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd32-pvc-hw-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, linux, pvc, hw]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    # we need to keep -j low (still problems on some PVC machines when we try to run it without limits)
+    - ./run_tests.py -j 8 -u FP -a xe64 -t xehpc-x32 --device=pvc --test_time 20 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-tgllp-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, linux, tgllp]
+  stage: test-gen12
+  needs: [linux-build-os-int]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x16 --device=tgllp --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-os-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-tgllp-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, linux, tgllp]
+  stage: test-gen12
+  needs: [linux-build-os-int]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x8 --device=tgllp --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-os-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-tgllp:
+  extends: [.deps-master-job]
+  tags: [docker, linux, tgllp]
+  stage: test-gen12
+  needs: [linux-build]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x8 --device=tgllp --test_time 20
+  after_script:
+    - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-tgllp:
+  extends: [.deps-master-job]
+  tags: [docker, linux, tgllp]
+  stage: test-gen12
+  needs: [linux-build]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x16 --device=tgllp --test_time 20
+  after_script:
+    - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-tgllp-int:
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, tgllp]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x8 --device=tgllp --test_time 20
+  after_script:
+    - git diff fail_db.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-dg1-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, linux, dg1]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export ISPC_GPU_DEVICE=$DG1_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x16 --device=tgllp --test_time 25 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-dg1-int:
+  extends: [.full-deps-master-int-job]
+  tags: [docker, linux, dg1]
+  stage: test-gen12
+  needs: [linux-build-int]
+  script:
+    - export ISPC_GPU_DEVICE=$DG1_GPU_DEVICE
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t xelp-x8 --device=tgllp --test_time 25 --fail_db=.gitlab/fail_db-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x16 --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-os-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x8 --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-os-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd16-O0-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x16 -o O0 --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-os-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+linux-test-simd8-O0-os-int:
+  extends: [.deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP -a xe64 -t gen9-x8 -o O0 --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  after_script:
+    - git diff .gitlab/fail_db-os-int.txt > fail_db.diff
+  artifacts:
+    paths:
+      - fail_db.diff
+    when: always
+
+
+linux-test-debug_check-simd16-os-int:
+  extends: [.full-deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py --debug_check -a xe64 -t gen9-x16 --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  allow_failure: true
+
+linux-test-debug_check-simd8-os-int:
+  extends: [.full-deps-master-os-job]
+  tags: [docker, gen9]
+  stage: test-gen9
+  needs: [linux-build-os-int]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py --debug_check -a xe64 -t gen9-x8 --test_time 20 --fail_db=.gitlab/fail_db-os-int.txt
+  allow_failure: true
+
+
+linux-test-cpu:
+  extends: [.no-deps-job]
+  tags: [docker]
+  stage: test-generic
+  needs: [linux-build-cpu]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - ./run_tests.py -u FP --test_time 20
+
+linux-ispctests-cpu:
+  extends: [.no-deps-job]
+  tags: [docker, avx512]
+  stage: test-generic
+  needs: [linux-build-cpu]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - .gitlab/run-ispctests.sh
+
+linux-test-rksuperbuild-cpu:
+  extends: [.no-deps-job]
+  image: amr-registry.caas.intel.com/renderkit/ubuntu:22.04
+  tags: [docker, avx512]
+  stage: test-generic
+  needs: [linux-package]
+  script:
+    - .gitlab/rksuperbuild/build.sh
+  # Until XDEPS-4520 is fixed
+  allow_failure: true
+
+linux-test-interop-ispc-gen9:
+  image: $DOCKER_REGISTRY/gen-int-dpcpp:$DEPENDENCIES_PIPELINE_ID_INT
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, gen9]
+  stage: test-generic
+  needs: [linux-build-int]
+  script:
+    - cd /opt/dpcpp_compiler
+    # startup.sh return exic code 1 because of
+    # /opt/dpcpp_compiler/lib/oclfpga/fpgavars.sh: No such file or directory
+    # so workaround it
+    - . ./startup.sh || true
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd $CI_PROJECT_DIR
+    - .gitlab/run-ispc-interop-tests.sh
+  allow_failure: true
+
+linux-test-interop-ispc-tgllp:
+  image: $DOCKER_REGISTRY/gen-int-dpcpp:$DEPENDENCIES_PIPELINE_ID_INT
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, tgllp]
+  stage: test-generic
+  needs: [linux-build-int]
+  script:
+    - cd /opt/dpcpp_compiler
+    # startup.sh return exic code 1 because of
+    # /opt/dpcpp_compiler/lib/oclfpga/fpgavars.sh: No such file or directory
+    # so workaround it
+    - . ./startup.sh || true
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd $CI_PROJECT_DIR
+    - export ISPC_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - export ISPCRT_GPU_DEVICE=$TGLLP_GPU_DEVICE
+    - .gitlab/run-ispc-interop-tests.sh
+  allow_failure: true
+
+linux-test-interop-ispc-dg1:
+  image: $DOCKER_REGISTRY/gen-int-dpcpp:$DEPENDENCIES_PIPELINE_ID_INT
+  extends: [.full-deps-master-int-job]
+  tags: [docker, linux, dg1]
+  stage: test-generic
+  needs: [linux-build-int]
+  script:
+    - cd /opt/dpcpp_compiler
+    # startup.sh return exic code 1 because of
+    # /opt/dpcpp_compiler/lib/oclfpga/fpgavars.sh: No such file or directory
+    # so workaround it
+    - . ./startup.sh || true
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd $CI_PROJECT_DIR
+    - export ISPC_GPU_DEVICE=$DG1_GPU_DEVICE
+    - export ISPCRT_GPU_DEVICE=$DG1_GPU_DEVICE
+    - .gitlab/run-ispc-interop-tests.sh
+  allow_failure: true
+
+linux-test-interop-ispc-dg2:
+  image: $DOCKER_REGISTRY/gen-int-dpcpp:$DEPENDENCIES_PIPELINE_ID_INT
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, dg2, hw]
+  stage: test-generic
+  needs: [linux-build-int]
+  script:
+    - cd /opt/dpcpp_compiler
+    # startup.sh return exic code 1 because of
+    # /opt/dpcpp_compiler/lib/oclfpga/fpgavars.sh: No such file or directory
+    # so workaround it
+    - . ./startup.sh || true
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd $CI_PROJECT_DIR
+    - .gitlab/run-ispc-interop-tests.sh
+  allow_failure: true
+
+linux-test-interop-ispc-pvc:
+  image: $DOCKER_REGISTRY/gen-int-dpcpp:$DEPENDENCIES_PIPELINE_ID_INT
+  extends: [.deps-master-int-job]
+  tags: [docker, linux, pvc, hw]
+  stage: test-generic
+  needs: [linux-build-int]
+  script:
+    - cd /opt/dpcpp_compiler
+    # startup.sh return exic code 1 because of
+    # /opt/dpcpp_compiler/lib/oclfpga/fpgavars.sh: No such file or directory
+    # so workaround it
+    - . ./startup.sh || true
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - cd $CI_PROJECT_DIR
+    - .gitlab/run-ispc-interop-tests.sh
+  allow_failure: true
+
+test-ispc-workloads:
+  extends: .deps-master-job
+  variables:
+    DEPENDENCIES_PIPELINE_ID: $DEPENDENCIES_PIPELINE_ID_OS
+    DEPENDENCIES_BRANCH_NAME: 'master'
+    DEPENDENCIES_POSTFIX: ''
+    ISPC_PIPELINE_ID: $CI_PIPELINE_ID
+    ISPC_BRANCH_NAME: $CI_COMMIT_REF_NAME
+    ISPC_COMMIT_SHA: $CI_COMMIT_SHORT_SHA
+    ISPC_COMMIT_MSG: $CI_COMMIT_MESSAGE
+    ISPC_BUILD_JOB_NAME: 'linux-build'
+    ISPC_WIN_BUILD_JOB_NAME: 'win-build'
+    FULL_TESTING: $FULL_TESTING
+  stage: test-deps
+  needs: [linux-build, win-build]
+  trigger:
+    project: ispc/ispc-workloads
+    branch: master
+    strategy: depend
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "master"'
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+
+test-ispc-workloads-int:
+  variables:
+    DEPENDENCIES_PIPELINE_ID: $DEPENDENCIES_PIPELINE_ID_INT
+    DEPENDENCIES_BRANCH_NAME: 'master-int'
+    DEPENDENCIES_POSTFIX: '-int'
+    ISPC_PIPELINE_ID: $CI_PIPELINE_ID
+    ISPC_BRANCH_NAME: $CI_COMMIT_REF_NAME
+    ISPC_COMMIT_SHA: $CI_COMMIT_SHORT_SHA
+    ISPC_COMMIT_MSG: $CI_COMMIT_MESSAGE
+    ISPC_BUILD_JOB_NAME: 'linux-build-int'
+    ISPC_WIN_BUILD_JOB_NAME: 'win-build-int'
+    FULL_TESTING: $FULL_TESTING
+  stage: test-deps
+  needs: [linux-build-int, win-build-int]
+  trigger:
+    project: ispc/ispc-workloads
+    branch: master
+    strategy: depend
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "master-int"'
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+
+test-ispc-workloads-os-int:
+  variables:
+    DEPENDENCIES_PIPELINE_ID: $DEPENDENCIES_PIPELINE_ID_OS_INT
+    DEPENDENCIES_BRANCH_NAME: 'master-os'
+    DEPENDENCIES_POSTFIX: '-os'
+    ISPC_PIPELINE_ID: $CI_PIPELINE_ID
+    ISPC_BRANCH_NAME: $CI_COMMIT_REF_NAME
+    ISPC_COMMIT_SHA: $CI_COMMIT_SHORT_SHA
+    ISPC_COMMIT_MSG: $CI_COMMIT_MESSAGE
+    ISPC_BUILD_JOB_NAME: 'linux-build-os-int'
+    FULL_TESTING: $FULL_TESTING
+  stage: test-deps
+  needs: [linux-build-os-int]
+  trigger:
+    project: ispc/ispc-workloads
+    branch: master
+    strategy: depend
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "master-os"'
+    - if: '$DEPENDENCIES_FLOW_NAME == "-"'
+
+linux-test-simd16-spv-generate-gta:
+  tags: [docker, gen9]
+  stage: others
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - $CI_PROJECT_DIR/.gitlab/gen-tests-for-gta/generate.sh xe64 gen9-x16 spv tests-bin-spv-simd16
+  artifacts:
+    name: "ispc-tests-bin-spv-simd16"
+    paths:
+      - tests-bin-spv-simd16/
+    when: on_success
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "-" && $CI_COMMIT_BRANCH == "gen"'
+      when: manual
+      allow_failure: true
+
+linux-test-simd8-spv-generate-gta:
+  tags: [docker, gen9]
+  stage: others
+  needs: [linux-build]
+  script:
+    - export PATH=$CI_PROJECT_DIR/build/install/bin:$PATH
+    - $CI_PROJECT_DIR/.gitlab/gen-tests-for-gta/generate.sh xe64 gen9-x8 spv tests-bin-spv-simd8
+  artifacts:
+    name: "ispc-tests-bin-spv-simd8"
+    paths:
+      - tests-bin-spv-simd8/
+    when: on_success
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "-" && $CI_COMMIT_BRANCH == "gen"'
+      when: manual
+      allow_failure: true
+
+
+generate-fail_db-patch:
+  tags: [docker, build]
+  stage: others
+  needs: []
+  script:
+    - .gitlab/patching-faildb/get-test-jobs-faildb-artifacts.sh ./patches
+    - .gitlab/patching-faildb/apply-patches.sh ./patches
+    - rm -rf ./patches
+    - git diff > ispc_fail_db.diff
+  artifacts:
+    name: "ispc-fail-db.diff"
+    paths:
+      - ispc_fail_db.diff
+    when: on_success
+  rules:
+    - when: manual
+      allow_failure: true
+
+update-ispc-workloads:
+  extends: .docker-in-docker
+  # no dependencies = wait for all prev stages succeed
+  dependencies: []
+  stage: deploy
+  script:
+    - .gitlab/update-ispc-workloads.sh
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "-" && $CI_COMMIT_BRANCH == "gen"'
+
+
+publish-ispc:
+  tags: [docker]
+  # no dependencies = wait for all prev stages succeed
+  dependencies: []
+  stage: deploy
+  script:
+    - .gitlab/publish-ispc.sh linux-build ispc-os
+    - .gitlab/publish-ispc.sh linux-build-int ispc-int
+  rules:
+    - if: '$DEPENDENCIES_FLOW_NAME == "-" && $CI_COMMIT_BRANCH == "gen"'
+
+
