@@ -207,3 +207,16 @@
 ./tests/idiv-int32.ispc runfail    xe64      xelpg-x16 mtl_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
 ./tests/idiv-uint16.ispc runfail    xe64      xelpg-x16 mtl_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
 ./tests/idiv-uint32.ispc runfail    xe64      xelpg-x16 mtl_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/array-gather-unif-runflags.ispc runfail    xe64      xexpc-x16 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/clock.ispc runfail    xe64      xexpc-x16 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-int16.ispc runfail    xe64      xexpc-x16 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-int32.ispc runfail    xe64      xexpc-x16 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-uint16.ispc runfail    xe64      xexpc-x16 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-uint32.ispc runfail    xe64      xexpc-x16 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/clock.ispc runfail    xe64      xexpc-x32 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-int16.ispc runfail    xe64      xexpc-x32 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-int32.ispc runfail    xe64      xexpc-x32 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-uint16.ispc runfail    xe64      xexpc-x32 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/idiv-uint32.ispc runfail    xe64      xexpc-x32 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/rand-distrib-1.ispc runfail    xe64      xexpc-x32 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/rand-distrib.ispc runfail    xe64      xexpc-x32 rlt_presi   Linux LLVM 14.0 clang++14.0 O2 spv *
