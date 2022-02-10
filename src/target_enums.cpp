@@ -187,6 +187,13 @@ ISPCTarget ParseISPCTarget(std::string target) {
     } else if (target == "xehpc-x32") {
         return ISPCTarget::xehpc_x32;
     }
+#ifdef __INTEL_EMBARGO__
+    else if (target == "xelpg-x8") {
+        return ISPCTarget::xelpg_x8;
+    } else if (target == "xelpg-x16") {
+        return ISPCTarget::xelpg_x16;
+    }
+#endif
 
     return ISPCTarget::error;
 }
@@ -313,6 +320,12 @@ std::string ISPCTargetToString(ISPCTarget target) {
         return "xehpc-x16";
     case ISPCTarget::xehpc_x32:
         return "xehpc-x32";
+#ifdef __INTEL_EMBARGO__
+    case ISPCTarget::xelpg_x8:
+        return "xelpg-x8";
+    case ISPCTarget::xelpg_x16:
+        return "xelpg-x16";
+#endif
     case ISPCTarget::none:
     case ISPCTarget::error:
         // Fall through
@@ -392,6 +405,10 @@ bool ISPCTargetIsGen(ISPCTarget target) {
     case ISPCTarget::xehpg_x16:
     case ISPCTarget::xehpc_x16:
     case ISPCTarget::xehpc_x32:
+#ifdef __INTEL_EMBARGO__
+    case ISPCTarget::xelpg_x8:
+    case ISPCTarget::xelpg_x16:
+#endif
         return true;
     default:
         return false;

@@ -103,6 +103,10 @@ enum class ISPCTarget {
     xehpg_x16,
     xehpc_x16,
     xehpc_x32,
+#ifdef __INTEL_EMBARGO__
+    xelpg_x8,
+    xelpg_x16,
+#endif
     error
 };
 
