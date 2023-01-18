@@ -192,6 +192,10 @@ ISPCTarget ParseISPCTarget(std::string target) {
         return ISPCTarget::xelpg_x8;
     } else if (target == "xelpg-x16") {
         return ISPCTarget::xelpg_x16;
+    } else if (target == "xexpc-x16") {
+        return ISPCTarget::xexpc_x16;
+    } else if (target == "xexpc-x32") {
+        return ISPCTarget::xexpc_x32;
     }
 #endif
 
@@ -325,6 +329,10 @@ std::string ISPCTargetToString(ISPCTarget target) {
         return "xelpg-x8";
     case ISPCTarget::xelpg_x16:
         return "xelpg-x16";
+    case ISPCTarget::xexpc_x16:
+        return "xexpc-x16";
+    case ISPCTarget::xexpc_x32:
+        return "xexpc-x32";
 #endif
     case ISPCTarget::none:
     case ISPCTarget::error:
@@ -408,6 +416,8 @@ bool ISPCTargetIsGen(ISPCTarget target) {
 #ifdef __INTEL_EMBARGO__
     case ISPCTarget::xelpg_x8:
     case ISPCTarget::xelpg_x16:
+    case ISPCTarget::xexpc_x16:
+    case ISPCTarget::xexpc_x32:
 #endif
         return true;
     default:

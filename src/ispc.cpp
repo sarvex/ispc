@@ -372,6 +372,7 @@ typedef enum {
     GPU_PVC,
 #ifdef __INTEL_EMBARGO__
     GPU_MTL,
+    GPU_RLT,
 #endif
 #endif
     sizeofDeviceType
@@ -435,6 +436,7 @@ std::map<DeviceType, std::set<std::string>> CPUFeatures = {
     {GPU_PVC, {}},
 #ifdef __INTEL_EMBARGO__
     {GPU_MTL, {}},
+    {GPU_RLT, {}},
 #endif
 #endif
 };
@@ -552,6 +554,10 @@ class AllCPUs {
         names[GPU_PVC].push_back("pvc");
 #ifdef __INTEL_EMBARGO__
         names[GPU_MTL].push_back("mtl");
+        // Currently supported ocloc device name for rlt:
+        names[GPU_RLT].push_back("rlt-a0");
+        // User friendly alias:
+        names[GPU_RLT].push_back("rlt");
 #endif
 #endif
 
@@ -641,6 +647,7 @@ class AllCPUs {
 #ifdef __INTEL_EMBARGO__
         compat[GPU_MTL] =
             Set(GPU_MTL, GPU_ACM_G10, GPU_ACM_G11, GPU_ACM_G12, GPU_ACM_G11, GPU_TGLLP, GPU_SKL, CPU_None);
+        compat[GPU_RLT] = Set(GPU_RLT, GPU_PVC, GPU_SKL, CPU_None);
 #endif
 #endif
     }
@@ -756,6 +763,9 @@ Target::Target(Arch arch, const char *cpu, ISPCTarget ispc_target, bool pic, boo
 #ifdef __INTEL_EMBARGO__
         case GPU_MTL:
             m_ispc_target = ISPCTarget::xelpg_x16;
+            break;
+        case GPU_RLT:
+            m_ispc_target = ISPCTarget::xexpc_x16;
             break;
 #endif
 #endif
@@ -1572,6 +1582,38 @@ Target::Target(Arch arch, const char *cpu, ISPCTarget ispc_target, bool pic, boo
         this->m_hasGather = this->m_hasScatter = true;
         CPUfromISA = GPU_MTL;
         break;
+    case ISPCTarget::xexpc_x16:
+        this->m_isa = Target::XEXPC;
+        this->m_nativeVectorWidth = 16;
+        this->m_nativeVectorAlignment = 64;
+        this->m_vectorWidth = 16;
+        this->m_dataTypeWidth = 32;
+        this->m_hasHalfConverts = true;
+        this->m_hasHalfFullSupport = true;
+        this->m_maskingIsFree = true;
+        this->m_maskBitCount = 1;
+        this->m_hasSaturatingArithmetic = true;
+        this->m_hasTranscendentals = true;
+        this->m_hasTrigonometry = true;
+        this->m_hasGather = this->m_hasScatter = true;
+        CPUfromISA = GPU_RLT;
+        break;
+    case ISPCTarget::xexpc_x32:
+        this->m_isa = Target::XEXPC;
+        this->m_nativeVectorWidth = 32;
+        this->m_nativeVectorAlignment = 64;
+        this->m_vectorWidth = 32;
+        this->m_dataTypeWidth = 32;
+        this->m_hasHalfConverts = true;
+        this->m_hasHalfFullSupport = true;
+        this->m_maskingIsFree = true;
+        this->m_maskBitCount = 1;
+        this->m_hasSaturatingArithmetic = true;
+        this->m_hasTranscendentals = true;
+        this->m_hasTrigonometry = true;
+        this->m_hasGather = this->m_hasScatter = true;
+        CPUfromISA = GPU_RLT;
+        break;
 #endif
 #else
     case ISPCTarget::gen9_x8:
@@ -1585,6 +1627,8 @@ Target::Target(Arch arch, const char *cpu, ISPCTarget ispc_target, bool pic, boo
 #ifdef __INTEL_EMBARGO__
     case ISPCTarget::xelpg_x8:
     case ISPCTarget::xelpg_x16:
+    case ISPCTarget::xexpc_x8:
+    case ISPCTarget::xexpc_x16:
 #endif
         unsupported_target = true;
         break;
@@ -2042,6 +2086,8 @@ const char *Target::ISAToString(ISA isa) {
 #ifdef __INTEL_EMBARGO__
     case Target::XELPG:
         return "xelpg";
+    case Target::XEXPC:
+        return "xexpc";
 #endif
 #endif
     default:
@@ -2077,6 +2123,8 @@ const char *Target::ISAToTargetString(ISA isa) {
 #ifdef __INTEL_EMBARGO__
     case Target::XELPG:
         return "xelpg-x16";
+    case Target::XEXPC:
+        return "xexpc-x16";
 #endif
 #endif
     case Target::SSE2:
@@ -2215,6 +2263,8 @@ Target::XePlatform Target::getXePlatform() const {
 #ifdef __INTEL_EMBARGO__
     case GPU_MTL:
         return XePlatform::xe_lpg;
+    case GPU_RLT:
+        return XePlatform::xe_xpc;
 #endif
     default:
         return XePlatform::gen9;
@@ -2231,6 +2281,8 @@ uint32_t Target::getXeGrfSize() const {
 #ifdef __INTEL_EMBARGO__
     case XePlatform::xe_lpg:
         return 32;
+    case XePlatform::xe_xpc:
+        return 64;
 #endif
     case XePlatform::xe_hpc:
         return 64;

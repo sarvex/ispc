@@ -275,7 +275,7 @@ endmacro()
 ## GPU specific macros/options ################################################
 ###############################################################################
 
-define_ispc_isa_options(XE gen9-x8 gen9-x16 xelp-x8 xelp-x16 xehpc-x16 xehpc-x32 xehpg-x8 xehpg-x16)
+define_ispc_isa_options(XE gen9-x8 gen9-x16 xelp-x8 xelp-x16 xehpc-x16 xehpc-x32 xehpg-x8 xehpg-x16 xexpc-x16 xexpc-x32)
 
 set(ISPC_XE_ADDITIONAL_ARGS "" CACHE STRING "extra arguments to pass to ISPC for Xe targets")
 
