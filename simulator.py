@@ -28,6 +28,10 @@ class Simulator(object):
             fulsim_tbx = f"-socket tcp:{port}"
             fulsim_flags = f"-device mtl.2x4x16.a0 {flags}" \
                            f"-swsbcheck on"
+        elif platform == "rlt":
+            fulsim_tbx = f"-socket tcp:{port}"
+            fulsim_flags = f"-device rlt.8x10x8.a0 {flags}" \
+                           f"-swsbcheck on"
 
         elif simu_path != "":
             raise SystemError(f"Unsupported Fulsim platform \"{platform}\"")
