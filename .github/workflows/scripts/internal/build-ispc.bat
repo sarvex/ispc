@@ -1,7 +1,7 @@
 set BUILD_EMBARGO=%1
 set ARTIFACTORY_BASE_URL=%2
 set LLVM_HOME=C:\llvm
-set LLVM_VER=14.0
+set LLVM_VER=15.0
 
 set disable_assertions=%LLVM_NO_ASSERTIONS%
 set signing_required=%SIGNING_REQUIRED%
