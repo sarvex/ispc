@@ -913,6 +913,11 @@
 ./tests/psubs-i64.ispc runfail    xe64      xehpc-x32 pvc   Linux LLVM 13.0 clang++13.0 O2 spv *
 ./tests/psubs-vi64.ispc runfail    xe64      xehpc-x32 pvc   Linux LLVM 13.0 clang++13.0 O2 spv *
 ./tests/int8-wrap.ispc runfail    xe64      xehpc-x32 pvc   Linux LLVM 14.0 clang++14.0 O2 spv *
+./tests/short-vec-6.ispc runfail    xe64        gen9-x8 unspec   Linux LLVM 14.0 clang++14.0 O0 spv *
+./tests/short-vec-6.ispc runfail    xe64       gen9-x16 unspec   Linux LLVM 14.0 clang++14.0 O0 spv *
+./tests/short-vec-6.ispc runfail    xe64        gen9-x8 unspec   Linux LLVM 15.0 clang++15.0 O0 spv *
+./tests/short-vec-6.ispc runfail    xe64       gen9-x16 unspec   Linux LLVM 15.0 clang++15.0 O0 spv *
+./tests/int8-wrap.ispc runfail    xe64      xehpc-x32 pvc   Linux LLVM 15.0 clang++15.0 O2 spv *
 .\tests\array-gather-multi-unif.ispc runfail  xe64        gen9-x16 unspec Windows LLVM 12.0         cl  spv *
 .\tests\array-mixed-unif-vary-indexing.ispc runfail  xe64        gen9-x16 unspec Windows LLVM 12.0         cl  spv *
 .\tests\array-multidim-gather-scatter.ispc runfail  xe64        gen9-x16 unspec Windows LLVM 12.0         cl  spv *
@@ -1399,5 +1404,3 @@
 .\tests\transcendentals-0-2.ispc compfail  xe64       gen9-x16 unspec Windows LLVM 12.0         cl  ze *
 .\tests\transcendentals-1-3.ispc compfail  xe64       gen9-x16 unspec Windows LLVM 12.0         cl  ze *
 .\tests\typedef-2.ispc runfail  xe64       gen9-x16 unspec Windows LLVM 12.0         cl  ze *
-./tests/short-vec-6.ispc runfail    xe64        gen9-x8 unspec   Linux LLVM 14.0 clang++14.0 O0 spv *
-./tests/short-vec-6.ispc runfail    xe64       gen9-x16 unspec   Linux LLVM 14.0 clang++14.0 O0 spv *
