@@ -1,0 +1,25 @@
+{
+    "__comment1__": "Copyright (c) 2023, Intel Corporation",
+    "__comment2__": "SPDX-License-Identifier: BSD-3-Clause",
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 23
+    },
+    "configurePresets": [
+        {
+            "name": "dependency-versions",
+            "cacheVariables": {
+                "LLVM_VERSION": "14.0",
+                "LLVM_URL": "https://github.com/llvm/llvm-project.git",
+                "VC_INTRINSICS_URL": "https://github.com/intel-innersource/drivers.gpu.compute.vc-intrinsics.git",
+                "VC_INTRINSICS_SHA": "ae74e704117c695175b4037a7fcb2b028ab4ea9a",
+                "SPIRV_TRANSLATOR_URL": "https://github.com/intel-innersource/drivers.gpu.compiler.spirv.llvm-translator",
+                "SPIRV_TRANSLATOR_SHA": "620ad58a2b19f47f5c7d5df14bd9860dd6341cc4",
+                "L0_URL": "https://github.com/oneapi-src/level-zero.git",
+                "L0_TAG": "v1.9.9",
+                "ISPC_CORPUS_URL": "https://github.com/intel-sandbox/applications.compilers.ispc.corpus.git"
+            }
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "__comment1__": "Copyright (c) 2023, Intel Corporation",
+    "__comment2__": "SPDX-License-Identifier: BSD-3-Clause",
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 23
+    },
+    "include": [
+        "IntelEmbargoPresets.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "default",
+            "inherits": "dependency-versions"
+        }
+    ]
+}
