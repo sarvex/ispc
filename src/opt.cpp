@@ -353,7 +353,9 @@ void ispc::Optimize(llvm::Module *module, int optLevel) {
 #if ISPC_LLVM_VERSION < ISPC_LLVM_15_0
         optPM.add(llvm::createLoopUnswitchPass(false));
 #else
-        optPM.add(llvm::createSimpleLoopUnswitchLegacyPass(false));
+        if (!g->target->isXeTarget()) {
+            optPM.add(llvm::createSimpleLoopUnswitchLegacyPass(false));
+        }
 #endif
         optPM.add(llvm::createInstructionCombiningPass());
         optPM.add(CreateInstructionSimplifyPass());
