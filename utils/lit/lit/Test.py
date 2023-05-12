@@ -288,12 +288,10 @@ class Test:
         return self.result.code.isFailure
 
     def getFullName(self):
-        return self.suite.config.name + ' :: ' + '/'.join(self.path_in_suite)
+        return f'{self.suite.config.name} :: ' + '/'.join(self.path_in_suite)
 
     def getFilePath(self):
-        if self.file_path:
-            return self.file_path
-        return self.getSourcePath()
+        return self.file_path if self.file_path else self.getSourcePath()
 
     def getSourcePath(self):
         return self.suite.getSourcePath(self.path_in_suite)
@@ -354,12 +352,12 @@ class Test:
             return False
 
         # Check the requirements after removing the limiting features (#2)
-        featuresMinusLimits = [f for f in self.config.available_features
-                               if not f in self.config.limit_to_features]
-        if not self.getMissingRequiredFeaturesFromList(featuresMinusLimits):
-            return False
-
-        return True
+        featuresMinusLimits = [
+            f
+            for f in self.config.available_features
+            if f not in self.config.limit_to_features
+        ]
+        return bool(self.getMissingRequiredFeaturesFromList(featuresMinusLimits))
 
     def getMissingRequiredFeaturesFromList(self, features):
         try:
@@ -414,5 +412,4 @@ class Test:
             BooleanExpression.tokenize(expr) for expr in
                 boolean_expressions if expr != '*'
         )
-        matchExpressions = set(filter(BooleanExpression.isMatchExpression, tokens))
-        return matchExpressions
+        return set(filter(BooleanExpression.isMatchExpression, tokens))

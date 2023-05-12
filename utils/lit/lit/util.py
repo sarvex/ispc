@@ -32,7 +32,7 @@ def pythonize_bool(value):
             return True
         if value.lower() in ('', '0', 'false', 'off', 'no'):
             return False
-    raise ValueError('"{}" is not a valid boolean'.format(value))
+    raise ValueError(f'"{value}" is not a valid boolean')
 
 
 def make_word_regex(word):
@@ -46,14 +46,7 @@ def to_bytes(s):
     are distinct.
 
     """
-    if isinstance(s, bytes):
-        # In Python2, this branch is taken for both 'str' and 'bytes'.
-        # In Python3, this branch is taken only for 'bytes'.
-        return s
-    # In Python2, 's' is a 'unicode' object.
-    # In Python3, 's' is a 'str' object.
-    # Encode to UTF-8 to get 'bytes' data.
-    return s.encode('utf-8')
+    return s if isinstance(s, bytes) else s.encode('utf-8')
 
 
 def to_string(b):
@@ -92,7 +85,7 @@ def to_string(b):
     try:
         return b.encode('utf-8')
     except AttributeError:
-        raise TypeError('not sure how to convert %s to %s' % (type(b), str))
+        raise TypeError(f'not sure how to convert {type(b)} to {str}')
 
 
 def to_unicode(s):
@@ -102,11 +95,7 @@ def to_unicode(s):
     In Python2, this is the unicode type. In Python3 it's the str type.
 
     """
-    if isinstance(s, bytes):
-        # In Python2, this branch is taken for both 'str' and 'bytes'.
-        # In Python3, this branch is taken only for 'bytes'.
-        return s.decode('utf-8')
-    return s
+    return s.decode('utf-8') if isinstance(s, bytes) else s
 
 
 def usable_core_count():
@@ -122,10 +111,7 @@ def usable_core_count():
 
     # On Windows with more than 60 processes, multiprocessing's call to
     # _winapi.WaitForMultipleObjects() prints an error and lit hangs.
-    if platform.system() == 'Windows':
-        return min(n, 60)
-
-    return n
+    return min(n, 60) if platform.system() == 'Windows' else n
 
 
 def mkdir(path):
@@ -238,23 +224,24 @@ def which(command, paths=None):
 
 
 def checkToolsPath(dir, tools):
-    for tool in tools:
-        if not os.path.exists(os.path.join(dir, tool)):
-            return False
-    return True
+    return all(os.path.exists(os.path.join(dir, tool)) for tool in tools)
 
 
 def whichTools(tools, paths):
-    for path in paths.split(os.pathsep):
-        if checkToolsPath(path, tools):
-            return path
-    return None
+    return next(
+        (
+            path
+            for path in paths.split(os.pathsep)
+            if checkToolsPath(path, tools)
+        ),
+        None,
+    )
 
 
 def printHistogram(items, title='Items'):
     items.sort(key=lambda item: item[1])
 
-    maxValue = max([v for _, v in items])
+    maxValue = max(v for _, v in items)
 
     # Select first "nice" bar height that produces more than 10 bars.
     power = int(math.ceil(math.log(maxValue, 10)))
@@ -266,14 +253,14 @@ def printHistogram(items, title='Items'):
         elif inc == 1:
             power -= 1
 
-    histo = [set() for i in range(N)]
+    histo = [set() for _ in range(N)]
     for name, v in items:
         bin = min(int(N * v / maxValue), N - 1)
         histo[bin].add(name)
 
     barW = 40
     hr = '-' * (barW + 34)
-    print('Slowest %s:' % title)
+    print(f'Slowest {title}:')
     print(hr)
     for name, value in reversed(items[-20:]):
         print('%.2fs: %s' % (value, name))
@@ -284,9 +271,9 @@ def printHistogram(items, title='Items'):
     if pfDigits:
         pDigits += pfDigits + 1
     cDigits = int(math.ceil(math.log(len(items), 10)))
-    print('[%s] :: [%s] :: [%s]' % ('Range'.center((pDigits + 1) * 2 + 3),
-                                    'Percentage'.center(barW),
-                                    'Count'.center(cDigits * 2 + 1)))
+    print(
+        f"[{'Range'.center((pDigits + 1) * 2 + 3)}] :: [{'Percentage'.center(barW)}] :: [{'Count'.center(cDigits * 2 + 1)}]"
+    )
     print(hr)
     for i, row in reversed(list(enumerate(histo))):
         pct = float(len(row)) / len(items)
@@ -311,7 +298,7 @@ class ExecuteCommandTimeoutException(Exception):
 
 # Close extra file handles on UNIX (on Windows this cannot be done while
 # also redirecting input).
-kUseCloseFDs = not (platform.system() == 'Windows')
+kUseCloseFDs = platform.system() != 'Windows'
 
 
 def executeCommand(command, cwd=None, env=None, input=None, timeout=0):
@@ -444,7 +431,7 @@ def killProcessAndChildren(pid):
 
     """
     if platform.system() == 'AIX':
-        subprocess.call('kill -kill $(ps -o pid= -L{})'.format(pid), shell=True)
+        subprocess.call(f'kill -kill $(ps -o pid= -L{pid})', shell=True)
     else:
         import psutil
         try:

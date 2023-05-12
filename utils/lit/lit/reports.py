@@ -20,10 +20,7 @@ class JsonReport(object):
         unexecuted_codes = {lit.Test.EXCLUDED, lit.Test.SKIPPED}
         tests = [t for t in tests if t.result.code not in unexecuted_codes]
         # Construct the data we will write.
-        data = {}
-        # Encode the current lit version as a schema version.
-        data['__version__'] = lit.__versioninfo__
-        data['elapsed'] = elapsed
+        data = {'__version__': lit.__versioninfo__, 'elapsed': elapsed}
         # FIXME: Record some information on the lit configuration used?
         # FIXME: Record information from the individual test suites?
 
@@ -47,7 +44,7 @@ class JsonReport(object):
                 for key, micro_test in test.result.microResults.items():
                     # Expand parent test name with micro test name
                     parent_name = test.getFullName()
-                    micro_full_name = parent_name + ':' + key
+                    micro_full_name = f'{parent_name}:{key}'
 
                     micro_test_data = {
                         'name': micro_full_name,
@@ -147,8 +144,7 @@ class XunitReport(object):
             return 'User interrupt'
 
         assert code == lit.Test.UNSUPPORTED
-        features = test.getMissingRequiredFeatures()
-        if features:
+        if features := test.getMissingRequiredFeatures():
             return 'Missing required feature(s): ' + ', '.join(features)
         return 'Unsupported configuration'
 
@@ -161,7 +157,7 @@ class TimeTraceReport(object):
 
     def write_results(self, tests, elapsed):
         # Find when first test started so we can make start times relative.
-        first_start_time = min([t.result.start for t in tests])
+        first_start_time = min(t.result.start for t in tests)
         events = [self._get_test_event(
             x, first_start_time) for x in tests if x.result.code not in self.skipped_codes]
 

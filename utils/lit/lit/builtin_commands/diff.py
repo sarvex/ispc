@@ -23,10 +23,8 @@ def getDirTree(path, basedir=""):
     # An empty dir has child_trees = [], a file has child_trees = None.
     child_trees = []
     for dirname, child_dirs, files in os.walk(os.path.join(basedir, path)):
-        for child_dir in child_dirs:
-            child_trees.append(getDirTree(child_dir, dirname))
-        for filename in files:
-            child_trees.append((filename, None))
+        child_trees.extend(getDirTree(child_dir, dirname) for child_dir in child_dirs)
+        child_trees.extend((filename, None) for filename in files)
         return path, sorted(child_trees)
 
 def compareTwoFiles(flags, filepaths):
@@ -60,10 +58,7 @@ def compareTwoBinaryFiles(flags, filepaths, filelines):
         diffs = [diff.decode(errors="backslashreplace") for diff in diffs]
     else:
         # python 2.7
-        if flags.unified_diff:
-            func = difflib.unified_diff
-        else:
-            func = difflib.context_diff
+        func = difflib.unified_diff if flags.unified_diff else difflib.context_diff
         diffs = func(filelines[0], filelines[1], filepaths[0], filepaths[1],
                      n = flags.num_context_lines)
 
@@ -135,12 +130,12 @@ def compareDirTrees(flags, dir_trees, base_paths=["", ""]):
                                [os.path.join(left_base, left_tree[0]),
                                 os.path.join(right_base, right_tree[0])])
 
-    if left_tree[1] is None and right_tree[1] is not None:
+    if left_tree[1] is None:
         printFileVsDir(os.path.join(left_base, left_tree[0]),
                        os.path.join(right_base, right_tree[0]))
         return 1
 
-    if left_tree[1] is not None and right_tree[1] is None:
+    if right_tree[1] is None:
         printDirVsFile(os.path.join(left_base, left_tree[0]),
                        os.path.join(right_base, right_tree[0]))
         return 1
@@ -196,7 +191,7 @@ def main(argv):
         sys.exit(1)
 
     flags = DiffFlags()
-    filelines, filepaths, dir_trees = ([] for i in range(3))
+    filelines, filepaths, dir_trees = ([] for _ in range(3))
     for o, a in opts:
         if o == "-w":
             flags.ignore_all_space = True
@@ -211,8 +206,7 @@ def main(argv):
                 if flags.num_context_lines < 0:
                     raise ValueException
             except:
-                sys.stderr.write("Error: invalid '-U' argument: {}\n"
-                                 .format(a))
+                sys.stderr.write(f"Error: invalid '-U' argument: {a}\n")
                 sys.exit(1)
         elif o == "-r":
             flags.recursive_diff = True

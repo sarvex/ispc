@@ -44,17 +44,17 @@ class Host(object):
     # set ispc exe using ISPC_HOME or PATH environment variables
     def set_ispc_exe(self):
         ispc_exe = ""
-        ispc_ext = ""
-        if self.is_windows():
-            ispc_ext = ".exe"
-        if "ISPC_HOME" in os.environ:
-            if os.path.exists(os.environ["ISPC_HOME"] + os.sep + "ispc" + ispc_ext):
-                ispc_exe = os.environ["ISPC_HOME"] + os.sep + "ispc" + ispc_ext
+        ispc_ext = ".exe" if self.is_windows() else ""
+        if "ISPC_HOME" in os.environ and os.path.exists(
+            os.environ["ISPC_HOME"] + os.sep + "ispc" + ispc_ext
+        ):
+            ispc_exe = os.environ["ISPC_HOME"] + os.sep + "ispc" + ispc_ext
         PATH_dir = os.environ["PATH"].split(os.pathsep)
         for counter in PATH_dir:
-            if ispc_exe == "":
-                if os.path.exists(counter + os.sep + "ispc" + ispc_ext):
-                    ispc_exe = counter + os.sep + "ispc" + ispc_ext
+            if ispc_exe == "" and os.path.exists(
+                counter + os.sep + "ispc" + ispc_ext
+            ):
+                ispc_exe = counter + os.sep + "ispc" + ispc_ext
         # checks the required ispc compiler otherwise prints an error message
         if ispc_exe == "":
             error("ISPC compiler not found.\nAdd path to ispc compiler to your PATH or ISPC_HOME env variable\n", 1)
@@ -78,15 +78,12 @@ class Host(object):
         return self.os == OS.FreeBSD
 
     def set_ispc_cmd(self, ispc_flags):
-        self.ispc_cmd = self.ispc_exe + " " + ispc_flags
+        self.ispc_cmd = f"{self.ispc_exe} {ispc_flags}"
 
 # The description of testing target configuration
 class TargetConfig(object):
     def __init__(self, arch, target, cpu):
-        if arch == "x86_64" or arch == "x86-64":
-            self.arch = "x86-64"
-        else:
-            self.arch = arch
+        self.arch = "x86-64" if arch in ["x86_64", "x86-64"] else arch
         self.target = target
         self.xe = target.find("gen9") != -1 or target.find("xe") != -1
         self.set_cpu(cpu)
@@ -132,7 +129,7 @@ def update_progress(fn, total_tests_arg, counter, max_test_length_arg):
         progress_str = " Done %d / %d [%s]" % (counter.value, total_tests_arg, fn)
         # spaces to clear out detrius from previous printing...
         spaces_needed = max_test_length_arg - len(fn)
-        for x in range(spaces_needed):
+        for _ in range(spaces_needed):
             progress_str += ' '
         progress_str += '\r'
         sys.stdout.write(progress_str)
@@ -181,7 +178,7 @@ def check_print_output(output):
     if len(lines) == 0 or len(lines) % 2:
         return False
     else:
-        return lines[0:len(lines)//2] == lines[len(lines)//2:len(lines)]
+        return lines[:len(lines)//2] == lines[len(lines)//2:]
 
 # run the commands in cmd_list
 def run_cmds(compile_cmds, run_cmd, filename, expect_failure, sig, exe_wd="."):
@@ -191,7 +188,7 @@ def run_cmds(compile_cmds, run_cmd, filename, expect_failure, sig, exe_wd="."):
         if compile_failed:
             print_debug("Compilation of test %s failed %s           \n" % (filename, "due to TIMEOUT" if timeout else ""), s, run_tests_log)
             if output != "":
-                print_debug("%s" % output, s, run_tests_log)
+                print_debug(f"{output}", s, run_tests_log)
             return Status.Compfail
 
     if not options.save_bin:
@@ -216,10 +213,7 @@ def run_cmds(compile_cmds, run_cmd, filename, expect_failure, sig, exe_wd="."):
              return_code), s, run_tests_log)
     if str(output):
         print_debug("%s\n" % output, s, run_tests_log)
-    if surprise == True:
-        return Status.Runfail
-    else:
-        return Status.Success
+    return Status.Runfail if surprise == True else Status.Success
 
 
 def add_prefix(path, host, target):
@@ -229,13 +223,9 @@ def add_prefix(path, host, target):
     else:
         # For Xe target we run tests in tmp dir since output file has
         # the same name for all tests, so the root is one level up
-        if target.is_xe():
-            input_prefix = "../"
-        else:
-            input_prefix = ""
+        input_prefix = "../" if target.is_xe() else ""
     path = input_prefix + path
-    path = os.path.abspath(path)
-    return path
+    return os.path.abspath(path)
 
 # Return True if test should be skipped,
 # return False otherwise.
@@ -296,20 +286,19 @@ def check_if_skip_test(filename, host, target):
                 break;
             rule = re.search('// *rule: (run|skip) on (arch|OS|cpu)=(.*)', test_line)
             # no match for this line -> look at next line
-            if rule == None:
+            if rule is None:
                 continue
 
             rule_action = rule.group(1)
             rule_key = rule.group(2)
             rule_value = rule.group(3)
 
-            for key in rule_values.keys():
-                if rule_key == key:
-                    if rule_value == rule_values[key] or rule_value == "*":
-                        if rule_action == "run":
-                            skip = False
-                        elif rule_action == "skip":
-                            skip = True
+            for key in rule_values:
+                if rule_key == key and rule_value in [rule_values[key], "*"]:
+                    if rule_action == "run":
+                        skip = False
+                    elif rule_action == "skip":
+                        skip = True
     return skip
 
 
@@ -509,7 +498,7 @@ def run_tasks_from_queue(queue, queue_ret, total_tests_arg, max_test_length_arg,
     if host.is_windows() or target.is_xe():
         tmpdir = "tmp%d" % os.getpid()
         while os.access(tmpdir, os.F_OK):
-            tmpdir = "%sx" % tmpdir
+            tmpdir = f"{tmpdir}x"
         os.mkdir(tmpdir)
         os.chdir(tmpdir)
     else:
@@ -547,13 +536,12 @@ def run_tasks_from_queue(queue, queue_ret, total_tests_arg, max_test_length_arg,
             os.rmdir(tmpdir)
         except:
             None
-    else:
-        if target.is_xe():
-            try:
-                os.chdir("..")
-                os.rmdir(tmpdir)
-            except:
-                None
+    elif target.is_xe():
+        try:
+            os.chdir("..")
+            os.rmdir(tmpdir)
+        except:
+            None
 
     # Task done for terminating `STOP`.
     queue.task_done()

@@ -46,16 +46,14 @@ def setting_paths(llvm, ispc, sde):
 def get_sde():
     sde_exe = ""
     PATH_dir = os.environ["PATH"].split(os.pathsep)
-    if current_OS == "Windows":
-        sde_n = "sde.exe"
-    else:
-        sde_n = "sde"
+    sde_n = "sde.exe" if current_OS == "Windows" else "sde"
     for counter in PATH_dir:
         if os.path.exists(counter + os.sep + sde_n) and sde_exe == "":
             sde_exe = counter + os.sep + sde_n
-    if os.environ.get("SDE_HOME") != None:
-        if os.path.exists(os.environ.get("SDE_HOME") + os.sep + sde_n):
-            sde_exe = os.environ.get("SDE_HOME") + os.sep + sde_n
+    if os.environ.get("SDE_HOME") != None and os.path.exists(
+        os.environ.get("SDE_HOME") + os.sep + sde_n
+    ):
+        sde_exe = os.environ.get("SDE_HOME") + os.sep + sde_n
     return sde_exe
 
 def check_LLVM(which_LLVM):
@@ -63,16 +61,20 @@ def check_LLVM(which_LLVM):
     if which_LLVM[0] == " ":
         return answer
     p = os.environ["LLVM_HOME"]
-    for i in range(0,len(which_LLVM)):
-        if not os.path.exists(p + os.sep + "bin-" + which_LLVM[i] + os.sep + "bin"):
-            answer.append(which_LLVM[i])
+    answer.extend(
+        which_LLVM[i]
+        for i in range(0, len(which_LLVM))
+        if not os.path.exists(
+            p + os.sep + "bin-" + which_LLVM[i] + os.sep + "bin"
+        )
+    )
     return answer
 
 def try_do_LLVM(text, command, from_validation, verbose=False):
-    print_debug("Command line: "+command+"\n", True, alloy_build)
+    print_debug(f"Command line: {command}" + "\n", True, alloy_build)
     if from_validation == True:
         text = text + "\n"
-    print_debug("Trying to " + text + " ", from_validation, alloy_build)
+    print_debug(f"Trying to {text} ", from_validation, alloy_build)
 
     with subprocess.Popen(command, shell=True,universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
         for line in proc.stdout:
@@ -81,7 +83,7 @@ def try_do_LLVM(text, command, from_validation, verbose=False):
     exit_status = proc.returncode
     if exit_status != 0:
         print_debug("ERROR.\n", from_validation, alloy_build)
-        alloy_error("can't " + text, 1)
+        alloy_error(f"can't {text}", 1)
     print_debug("DONE.\n", from_validation, alloy_build)
 
 def checkout_LLVM(component, version_LLVM, target_dir, from_validation, verbose):
@@ -91,7 +93,7 @@ def checkout_LLVM(component, version_LLVM, target_dir, from_validation, verbose)
     # Identify the version
     # An example of using branch (instead of final tag) is the following (for 16.0):
     # git: "release/16.x"
-    if  version_LLVM == "trunk":
+    if version_LLVM == "trunk":
         GIT_TAG="main"
     elif  version_LLVM == "16_0":
         GIT_TAG="llvmorg-16.0.2"
@@ -120,7 +122,7 @@ def checkout_LLVM(component, version_LLVM, target_dir, from_validation, verbose)
     elif  version_LLVM == "6_0":
         GIT_TAG="llvmorg-6.0.1"
     else:
-        alloy_error("Unsupported llvm version: " + version_LLVM, 1)
+        alloy_error(f"Unsupported llvm version: {version_LLVM}", 1)
 
     depth = "" if options.full_checkout else "--depth=1 --shallow-submodules"
     git_clone_cmd = f"git clone {depth} --branch {GIT_TAG} {GIT_REPO_BASE} {target_dir}"

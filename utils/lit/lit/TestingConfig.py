@@ -31,17 +31,11 @@ class TestingConfig(object):
                      'WindowsSDKLibVersion', 'SOURCE_DATE_EPOCH']
 
         if sys.platform == 'win32':
-            pass_vars.append('INCLUDE')
-            pass_vars.append('LIB')
-            pass_vars.append('PATHEXT')
-            pass_vars.append('USERPROFILE')
+            pass_vars.extend(('INCLUDE', 'LIB', 'PATHEXT', 'USERPROFILE'))
             environment['PYTHONBUFFERED'] = '1'
 
         for var in pass_vars:
-            val = os.environ.get(var, '')
-            # Check for empty string as some variables such as LD_PRELOAD cannot be empty
-            # ('') for OS's such as OpenBSD.
-            if val:
+            if val := os.environ.get(var, ''):
                 environment[var] = val
 
         # Set the default available features based on the LitConfig.
@@ -75,13 +69,11 @@ class TestingConfig(object):
 
         # Load the config script data.
         data = None
-        f = open(path)
-        try:
-            data = f.read()
-        except:
-            litConfig.fatal('unable to load config file: %r' % (path,))
-        f.close()
-
+        with open(path) as f:
+            try:
+                data = f.read()
+            except:
+                litConfig.fatal('unable to load config file: %r' % (path,))
         # Execute the config script to initialize the object.
         cfg_globals = dict(globals())
         cfg_globals['config'] = self
@@ -137,9 +129,13 @@ class TestingConfig(object):
     @recursiveExpansionLimit.setter
     def recursiveExpansionLimit(self, value):
         if value is not None and not isinstance(value, int):
-            raise ValueError('recursiveExpansionLimit must be either None or an integer (got <{}>)'.format(value))
+            raise ValueError(
+                f'recursiveExpansionLimit must be either None or an integer (got <{value}>)'
+            )
         if isinstance(value, int) and value < 0:
-            raise ValueError('recursiveExpansionLimit must be a non-negative integer (got <{}>)'.format(value))
+            raise ValueError(
+                f'recursiveExpansionLimit must be a non-negative integer (got <{value}>)'
+            )
         self._recursiveExpansionLimit = value
 
     def finish(self, litConfig):
@@ -162,10 +158,7 @@ class TestingConfig(object):
     @property
     def root(self):
         """root attribute - The root configuration for the test suite."""
-        if self.parent is None:
-            return self
-        else:
-            return self.parent.root
+        return self if self.parent is None else self.parent.root
 
 class SubstituteCaptures:
     """

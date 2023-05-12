@@ -50,15 +50,13 @@ class ProgressPredictor(object):
 
         # NOTE: median would be more precise, but might be too slow.
         average_test_time = (self.time_elapsed + self.predictable_time_remaining) / \
-            (self.completed + self.predictable_tests_remaining)
+                (self.completed + self.predictable_tests_remaining)
         unpredictable_time_remaining = average_test_time * \
-            self.unpredictable_tests_remaining
+                self.unpredictable_tests_remaining
         total_time_remaining = self.predictable_time_remaining + unpredictable_time_remaining
         total_time = self.time_elapsed + total_time_remaining
 
-        if total_time > 0:
-            return self.time_elapsed / total_time
-        return 0
+        return self.time_elapsed / total_time if total_time > 0 else 0
 
 
 class NopDisplay(object):
@@ -86,10 +84,11 @@ class Display(object):
     def update(self, test):
         self.completed += 1
 
-        show_result = test.isFailure() or \
-                self.opts.showAllOutput or \
-                (not self.opts.quiet and not self.opts.succinct)
-        if show_result:
+        if (
+            show_result := test.isFailure()
+            or self.opts.showAllOutput
+            or (not self.opts.quiet and not self.opts.succinct)
+        ):
             if self.progress_bar:
                 self.progress_bar.clear(interrupted=False)
             self.print_result(test)
@@ -112,10 +111,9 @@ class Display(object):
 
         # Show the test failure output, if requested.
         if (test.isFailure() and self.opts.showOutput) or \
-           self.opts.showAllOutput:
+               self.opts.showAllOutput:
             if test.isFailure():
-                print("%s TEST '%s' FAILED %s" % ('*'*20, test.getFullName(),
-                                                  '*'*20))
+                print(f"{'*' * 20} TEST '{test.getFullName()}' FAILED {'*' * 20}")
             out = test.result.output
             # Encode/decode so that, when using Python 3.6.5 in Windows 10,
             # print(out) doesn't raise UnicodeEncodeError if out contains
@@ -137,24 +135,22 @@ class Display(object):
 
         # Report test metrics, if present.
         if test.result.metrics:
-            print("%s TEST '%s' RESULTS %s" % ('*'*10, test.getFullName(),
-                                               '*'*10))
+            print(f"{'*' * 10} TEST '{test.getFullName()}' RESULTS {'*' * 10}")
             items = sorted(test.result.metrics.items())
             for metric_name, value in items:
-                print('%s: %s ' % (metric_name, value.format()))
+                print(f'{metric_name}: {value.format()} ')
             print("*" * 10)
 
         # Report micro-tests, if present
         if test.result.microResults:
             items = sorted(test.result.microResults.items())
             for micro_test_name, micro_test in items:
-                print("%s MICRO-TEST: %s" %
-                         ('*'*3, micro_test_name))
+                print(f"{'*' * 3} MICRO-TEST: {micro_test_name}")
 
                 if micro_test.metrics:
                     sorted_metrics = sorted(micro_test.metrics.items())
                     for metric_name, value in sorted_metrics:
-                        print('    %s:  %s ' % (metric_name, value.format()))
+                        print(f'    {metric_name}:  {value.format()} ')
 
         # Ensure the output is flushed.
         sys.stdout.flush()

@@ -25,9 +25,8 @@ def get_host_name():
     return socket.gethostname()
 
 def write_to_file(filename, line):
-    f = open(filename, 'a')
-    f.writelines(line)
-    f.close()
+    with open(filename, 'a') as f:
+        f.writelines(line)
 
 # remove file if it exists
 def remove_if_exists(filename):
@@ -47,40 +46,49 @@ def make_sure_dir_exists(path):
 
 # detect version which is printed after command
 def take_lines(command, which):
-    os.system(command + " > " + "temp_detect_version")
-    version = open("temp_detect_version")
-    if which == "first":
-        answer = version.readline()
-    if which == "all":
-        answer = version.readlines()
-    version.close()
+    os.system(f"{command} > temp_detect_version")
+    with open("temp_detect_version") as version:
+        if which == "first":
+            answer = version.readline()
+        if which == "all":
+            answer = version.readlines()
     remove_if_exists("temp_detect_version")
     return answer
 
 # print versions of compilers
 def print_version(ispc_test, ispc_ref, ref_compiler, s, perf_log, is_windows):
-    print_debug("\nUsing test compiler: " + take_lines(ispc_test + " --version", "first"), s, perf_log)
+    print_debug(
+        "\nUsing test compiler: "
+        + take_lines(f"{ispc_test} --version", "first"),
+        s,
+        perf_log,
+    )
     if ispc_ref != "":
-        print_debug("Using ref compiler:  " + take_lines(ispc_ref + " --version", "first"), s, perf_log)
+        print_debug(
+            "Using ref compiler:  "
+            + take_lines(f"{ispc_ref} --version", "first"),
+            s,
+            perf_log,
+        )
     if is_windows == False:
-        temp1 = take_lines(ref_compiler + " --version", "first")
+        temp1 = take_lines(f"{ref_compiler} --version", "first")
     else:
-        os.system(ref_compiler + " 2>&1" + " 2> temp_detect_version > temp_detect_version1" )
-        version = open("temp_detect_version")
-        temp1 = version.readline()
-        version.close()
+        os.system(f"{ref_compiler} 2>&1 2> temp_detect_version > temp_detect_version1")
+        with open("temp_detect_version") as version:
+            temp1 = version.readline()
         remove_if_exists("temp_detect_version")
         remove_if_exists("temp_detect_version1")
-    print_debug("Using C/C++ compiler: " + temp1 + "\n", s, perf_log)
+    print_debug(f"Using C/C++ compiler: {temp1}" + "\n", s, perf_log)
 
 # print everything from scripts instead errors
 def print_debug(line, silent, filename):
     if silent == False:
         sys.stdout.write(line)
         sys.stdout.flush()
-        if os.environ.get("ISPC_HOME") != None:
-            if os.path.exists(os.environ.get("ISPC_HOME")):
-                write_to_file(os.environ["ISPC_HOME"] + os.sep + "notify_log.log", line)
+        if os.environ.get("ISPC_HOME") != None and os.path.exists(
+            os.environ.get("ISPC_HOME")
+        ):
+            write_to_file(os.environ["ISPC_HOME"] + os.sep + "notify_log.log", line)
     if filename != "":
         write_to_file(filename, line)
 
@@ -91,12 +99,12 @@ def print_debug(line, silent, filename):
 def error(line, error_type = 1):
     line = line + "\n"
     if error_type == 1:
-        sys.stderr.write("Fatal error: " + line)
+        sys.stderr.write(f"Fatal error: {line}")
         sys.exit(1)
     if error_type == 2:
-        sys.stderr.write("Warning: " + line)
+        sys.stderr.write(f"Warning: {line}")
     if error_type == 0:
-        print_debug("FIND ERROR: " + line, False, "")
+        print_debug(f"FIND ERROR: {line}", False, "")
 
 def check_tools(m):
     input_tools=[[[1,4],"m4 --version", "bad m4 version"],
@@ -140,18 +148,17 @@ class TestResult(object):
     def __cmp__(self, other):
         if isinstance(other, TestResult):
             if self.runfailed == other.runfailed   and \
-               self.compfailed == other.compfailed:
+                   self.compfailed == other.compfailed:
                 return 0
             elif self.compfailed > other.compfailed:
                 return 1
             elif self.runfailed > other.runfailed and \
-                 self.compfailed == other.compfailed:
+                     self.compfailed == other.compfailed:
                 return 1
             else:
                 return -1
 
         raise RuntimeError("Wrong type for comparioson")
-        return NotImplemented
 
     def __repr__(self):
         if (self.runfailed < 0 or self.compfailed < 0):
@@ -170,26 +177,21 @@ class TestCase(object):
         self.result = TestResult(-1, -1)
 
     def __repr__(self):
-        string = "%s %s %s: " % (self.arch, self.opt, self.target)
-        string = string + repr(self.result)
-        return string
+        string = f"{self.arch} {self.opt} {self.target}: "
+        return string + repr(self.result)
 
     def __hash__(self):
         return hash(self.arch + self.opt + self.target)
 
     def __ne__(self, other):
         if isinstance(other, TestCase):
-            if hash(self.arch + self.opt + self.target) != hash(other):
-                return True
-            return False
+            return hash(self.arch + self.opt + self.target) != hash(other)
         raise RuntimeError("Wrong type for comparioson")
-        return NotImplemented
 
     def __eq__(self, other):
         if isinstance(other, TestCase):
             return not self.__ne__(other)
         raise RuntimeError("Wrong type for comparioson")
-        return NotImplemented
 
 
 class Test(object):
@@ -203,8 +205,7 @@ class Test(object):
 
     def add_result(self, test_case):
         if test_case in self.test_cases:
-            raise RuntimeError("This test case is already in the list: " + repr(test_case))
-            return
+            raise RuntimeError(f"This test case is already in the list: {repr(test_case)}")
         self.test_cases.append(test_case)
 
     def __repr__(self):
@@ -218,16 +219,10 @@ class Test(object):
         return hash(self.name)
 
     def __ne__(self, other):
-        if isinstance(other, Test):
-            if hash(self) != hash(other):
-                return True
-            return False
-        return NotImplemented
+        return hash(self) != hash(other) if isinstance(other, Test) else NotImplemented
 
     def __eq__(self, other):
-        if isinstance(other, Test):
-            return not self.__ne__(other)
-        return NotImplemented
+        return not self.__ne__(other) if isinstance(other, Test) else NotImplemented
 
 
 class RegressionInfo(object):
@@ -325,13 +320,13 @@ class TestTable(object):
         """ Return a tuple of Test() objects containing TestCase() object which show regression along given revisions """
         revision_old, revision_new = (str(revision_old), str(revision_new))
         if revision_new not in self.table:
-            raise RuntimeError("This revision in not in the database: " + str(revision_new) + " (" + str(list(self.table.keys())) + ")")
-            return
-
+            raise RuntimeError(
+                f"This revision in not in the database: {revision_new} ({list(self.table.keys())})"
+            )
         if revision_old not in self.table:
-            raise RuntimeError("This revision in not in the database: " + str(revision_old) + " (" + str(list(self.table.keys())) + ")")
-            return
-
+            raise RuntimeError(
+                f"This revision in not in the database: {revision_old} ({list(self.table.keys())})"
+            )
         regressed = []
         for test_old in self.table[revision_old]:
             for test_new in self.table[revision_new]:
@@ -347,7 +342,7 @@ class TestTable(object):
     def __repr__(self):
         string = ""
         for rev in self.table.keys():
-            string += "[" + rev + "]:\n"
+            string += f"[{rev}" + "]:\n"
             for test in self.table[rev]:
                 string += repr(test) + '\n'
         return string
@@ -437,7 +432,7 @@ class ExecutionStateGatherer(object):
         self.tt = tt
         REVISIONS = list(tt.table.keys())
         self.revision = ""
-        if len(REVISIONS) != 0:
+        if REVISIONS:
             self.revision = REVISIONS[0]
         print("ESG: loaded from 'TestTable()' with revisions", REVISIONS)
 

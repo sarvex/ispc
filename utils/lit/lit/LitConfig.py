@@ -44,9 +44,13 @@ class LitConfig(object):
         # Configuration files to look for when discovering test suites.
         self.config_prefix = config_prefix or 'lit'
         self.suffixes = ['cfg.py', 'cfg']
-        self.config_names = ['%s.%s' % (self.config_prefix,x) for x in self.suffixes]
-        self.site_config_names = ['%s.site.%s' % (self.config_prefix,x) for x in self.suffixes]
-        self.local_config_names = ['%s.local.%s' % (self.config_prefix,x) for x in self.suffixes]
+        self.config_names = [f'{self.config_prefix}.{x}' for x in self.suffixes]
+        self.site_config_names = [
+            f'{self.config_prefix}.site.{x}' for x in self.suffixes
+        ]
+        self.local_config_names = [
+            f'{self.config_prefix}.local.{x}' for x in self.suffixes
+        ]
 
         self.numErrors = 0
         self.numWarnings = 0
@@ -137,8 +141,7 @@ class LitConfig(object):
                        '[[ -f "%s" ]]' % self.bashPath.replace('\\', '\\\\')]
             _, _, exitCode = lit.util.executeCommand(command)
             if exitCode:
-                self.note('bash command failed: %s' % (
-                    ' '.join('"%s"' % c for c in command)))
+                self.note(f"""bash command failed: {' '.join(f'"{c}"' for c in command)}""")
                 self.bashPath = ''
 
         if not self.bashPath:

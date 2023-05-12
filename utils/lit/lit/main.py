@@ -56,15 +56,17 @@ def main(builtin_params={}):
         sys.exit(0)
 
     # Command line overrides configuration for maxIndividualTestTime.
-    if opts.maxIndividualTestTime is not None:  # `not None` is important (default: 0)
-        if opts.maxIndividualTestTime != lit_config.maxIndividualTestTime:
-            lit_config.note(('The test suite configuration requested an individual'
-                ' test timeout of {0} seconds but a timeout of {1} seconds was'
-                ' requested on the command line. Forcing timeout to be {1}'
-                ' seconds')
-                .format(lit_config.maxIndividualTestTime,
-                        opts.maxIndividualTestTime))
-            lit_config.maxIndividualTestTime = opts.maxIndividualTestTime
+    if (
+        opts.maxIndividualTestTime is not None
+        and opts.maxIndividualTestTime != lit_config.maxIndividualTestTime
+    ):
+        lit_config.note(('The test suite configuration requested an individual'
+            ' test timeout of {0} seconds but a timeout of {1} seconds was'
+            ' requested on the command line. Forcing timeout to be {1}'
+            ' seconds')
+            .format(lit_config.maxIndividualTestTime,
+                    opts.maxIndividualTestTime))
+        lit_config.maxIndividualTestTime = opts.maxIndividualTestTime
 
     determine_order(discovered_tests, opts.order)
 
@@ -149,19 +151,19 @@ def print_discovered(tests, show_suites, show_tests):
         for suite, test_iter in tests_by_suite:
             test_count = sum(1 for _ in test_iter)
             print('  %s - %d tests' % (suite.name, test_count))
-            print('    Source Root: %s' % suite.source_root)
-            print('    Exec Root  : %s' % suite.exec_root)
+            print(f'    Source Root: {suite.source_root}')
+            print(f'    Exec Root  : {suite.exec_root}')
             features = ' '.join(sorted(suite.config.available_features))
-            print('    Available Features: %s' % features)
+            print(f'    Available Features: {features}')
             substitutions = sorted(suite.config.substitutions)
-            substitutions = ('%s => %s' % (x, y) for (x, y) in substitutions)
+            substitutions = (f'{x} => {y}' for (x, y) in substitutions)
             substitutions = '\n'.ljust(30).join(substitutions)
-            print('    Available Substitutions: %s' % substitutions)
+            print(f'    Available Substitutions: {substitutions}')
 
     if show_tests:
         print('-- Available Tests --')
         for t in tests:
-            print('  %s' % t.getFullName())
+            print(f'  {t.getFullName()}')
 
 
 def determine_order(tests, order):
@@ -243,12 +245,12 @@ def execute_in_tmp_dir(run, lit_config):
     if 'LIT_PRESERVES_TMP' not in os.environ:
         import tempfile
         tmp_dir = tempfile.mkdtemp(prefix="lit_tmp_")
-        os.environ.update({
-                'TMPDIR': tmp_dir,
-                'TMP': tmp_dir,
-                'TEMP': tmp_dir,
-                'TEMPDIR': tmp_dir,
-                })
+        os.environ |= {
+            'TMPDIR': tmp_dir,
+            'TMP': tmp_dir,
+            'TEMP': tmp_dir,
+            'TEMPDIR': tmp_dir,
+        }
     try:
         run.execute()
     finally:
@@ -257,13 +259,15 @@ def execute_in_tmp_dir(run, lit_config):
                 import shutil
                 shutil.rmtree(tmp_dir)
             except Exception as e: 
-                lit_config.warning("Failed to delete temp directory '%s', try upgrading your version of Python to fix this" % tmp_dir)
+                lit_config.warning(
+                    f"Failed to delete temp directory '{tmp_dir}', try upgrading your version of Python to fix this"
+                )
 
 
 def print_histogram(tests):
-    test_times = [(t.getFullName(), t.result.elapsed)
-                  for t in tests if t.result.elapsed]
-    if test_times:
+    if test_times := [
+        (t.getFullName(), t.result.elapsed) for t in tests if t.result.elapsed
+    ]:
         lit.util.printHistogram(test_times, title='Tests')
 
 
@@ -284,9 +288,9 @@ def print_group(tests, code, shown_codes):
     if not code.isFailure and code not in shown_codes:
         return
     print('*' * 20)
-    print('{} Tests ({}):'.format(code.label, len(tests)))
+    print(f'{code.label} Tests ({len(tests)}):')
     for test in tests:
-        print('  %s' % test.getFullName())
+        print(f'  {test.getFullName()}')
     sys.stdout.write('\n')
 
 
@@ -307,4 +311,4 @@ def print_summary(tests_by_code, quiet, elapsed):
     for (label, count) in groups:
         label = label.ljust(max_label_len)
         count = str(count).rjust(max_count_len)
-        print('  %s: %s' % (label, count))
+        print(f'  {label}: {count}')

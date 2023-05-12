@@ -94,11 +94,7 @@ def getTestSuite(item, litConfig, cache):
 def getLocalConfig(ts, path_in_suite, litConfig, cache):
     def search1(path_in_suite):
         # Get the parent config.
-        if not path_in_suite:
-            parent = ts.config
-        else:
-            parent = search(path_in_suite[:-1])
-
+        parent = ts.config if not path_in_suite else search(path_in_suite[:-1])
         # Check if there is a local configuration file.
         source_path = ts.getSourcePath(path_in_suite)
         cfgpath = chooseConfigFileFromDir(source_path, litConfig.local_config_names)
@@ -166,12 +162,12 @@ def getTestsInSuite(ts, path_in_suite, litConfig,
             and lc.test_format is not None
             and not lc.standalone_tests
         ):
-            found = False
-            for res in lc.test_format.getTestsInDirectory(ts, test_dir_in_suite,
-                                                          litConfig, lc):
-                if test.getFullName() == res.getFullName():
-                    found = True
-                    break
+            found = any(
+                test.getFullName() == res.getFullName()
+                for res in lc.test_format.getTestsInDirectory(
+                    ts, test_dir_in_suite, litConfig, lc
+                )
+            )
             if not found:
                 litConfig.error(
                     '%r would not be run indirectly: change name or LIT config'
@@ -196,10 +192,9 @@ def getTestsInSuite(ts, path_in_suite, litConfig,
 
     # Search for tests.
     if lc.test_format is not None:
-        for res in lc.test_format.getTestsInDirectory(ts, path_in_suite,
-                                                      litConfig, lc):
-            yield res
-
+        yield from lc.test_format.getTestsInDirectory(
+            ts, path_in_suite, litConfig, lc
+        )
     # Search subdirectories.
     for filename in os.listdir(source_path):
         # FIXME: This doesn't belong here?
@@ -261,8 +256,7 @@ def find_tests_for_inputs(lit_config, inputs, indirectlyRunCheck):
             f = open(input[1:])
             try:
                 for ln in f:
-                    ln = ln.strip()
-                    if ln:
+                    if ln := ln.strip():
                         actual_inputs.append(ln)
             finally:
                 f.close()
@@ -282,9 +276,9 @@ def find_tests_for_inputs(lit_config, inputs, indirectlyRunCheck):
 
     # This data is no longer needed but keeping it around causes awful
     # performance problems while the test suites run.
-    for k, suite in test_suite_cache.items():
-      if suite[0]:
-        suite[0].test_times = None
+    for suite in test_suite_cache.values():
+        if suite[0]:
+          suite[0].test_times = None
 
     # If there were any errors during test discovery, exit now.
     if lit_config.numErrors:

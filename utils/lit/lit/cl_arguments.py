@@ -20,9 +20,9 @@ def parse_args():
             metavar="TEST_PATH",
             help='File or path to include in the test suite')
 
-    parser.add_argument('--version',
-            action='version',
-            version='%(prog)s ' + lit.__version__)
+    parser.add_argument(
+        '--version', action='version', version=f'%(prog)s {lit.__version__}'
+    )
 
     parser.add_argument("-j", "--threads", "--workers",
             dest="workers",
@@ -79,12 +79,13 @@ def parse_args():
                      if not c.isFailure]
     for code in success_codes:
         format_group.add_argument(
-            "--show-{}".format(code.name.lower()),
+            f"--show-{code.name.lower()}",
             dest="shown_codes",
-            help="Show {} tests ({})".format(code.label.lower(), code.name),
+            help=f"Show {code.label.lower()} tests ({code.name})",
             action="append_const",
             const=code,
-            default=[])
+            default=[],
+        )
 
     execution_group = parser.add_argument_group("Test Execution")
     execution_group.add_argument("--path",
@@ -215,11 +216,7 @@ def parse_args():
     if opts.incremental:
         print('WARNING: --incremental is deprecated. Failing tests now always run first.')
 
-    if opts.shuffle:
-        opts.order = TestOrder.RANDOM
-    else:
-        opts.order = TestOrder.DEFAULT
-
+    opts.order = TestOrder.RANDOM if opts.shuffle else TestOrder.DEFAULT
     if opts.numShards or opts.runShard:
         if not opts.numShards or not opts.runShard:
             parser.error("--num-shards and --run-shard must be used together")

@@ -124,8 +124,8 @@ class Run(object):
             if soft_limit < desired_limit:
                 resource.setrlimit(NPROC, (desired_limit, hard_limit))
                 self.lit_config.note('Raised process limit from %d to %d' % \
-                                        (soft_limit, desired_limit))
+                                            (soft_limit, desired_limit))
         except Exception as ex:
             # Warn, unless this is Windows, in which case this is expected.
             if os.name != 'nt':
-                self.lit_config.warning('Failed to raise process limit: %s' % ex)
+                self.lit_config.warning(f'Failed to raise process limit: {ex}')

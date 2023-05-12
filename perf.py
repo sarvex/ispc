@@ -8,15 +8,14 @@
 
 def print_file(line):
     if options.output != "":
-        output = open(options.output, 'w')
-        output.writelines(line)
-        output.close()
+        with open(options.output, 'w') as output:
+            output.writelines(line)
 
 def execute_test(commands):
     r = 0
-    common.remove_if_exists(perf_temp+"_test")
-    common.remove_if_exists(perf_temp+"_ref")
-    for k in range(int(options.number)):
+    common.remove_if_exists(f"{perf_temp}_test")
+    common.remove_if_exists(f"{perf_temp}_ref")
+    for _ in range(int(options.number)):
         r = r + os.system(commands[0])
         if options.ref:
             r = r + os.system(commands[1])
@@ -30,10 +29,10 @@ def run_test(commands, c1, c2, test, test_ref, b_serial):
         exit_code = 1
         return
     print_debug("TEST COMPILER:\n", s, perf_log)
-    analyse_test(c1, c2, test, b_serial, perf_temp+"_test")
+    analyse_test(c1, c2, test, b_serial, f"{perf_temp}_test")
     if options.ref:
         print_debug("REFERENCE COMPILER:\n", s, perf_log)
-        analyse_test(c1, c2, test_ref, b_serial, perf_temp+"_ref")
+        analyse_test(c1, c2, test_ref, b_serial, f"{perf_temp}_ref")
 
 
 def analyse_test(c1, c2, test, b_serial, perf_temp_n):
@@ -58,24 +57,22 @@ def analyse_test(c1, c2, test, b_serial, perf_temp_n):
                         ispc.append(number)
                 c1 = c1 + c2
             j+=1
-        if "million cycles" in line:
-            if j == c1:
-                if line[0] == '@':
-                    print_debug(line, True, perf_log)
-                else:
-                    line = line.replace("]","[")
-                    line = line.split("[")
-                    number = float(line[3])
-                    if "tasks" in line[1]:
-                        absolute_tasks.append(number)
-                    else:
-                        if "ispc" in line[1]:
-                            absolute_ispc.append(number)
-                    if "serial" in line[1]:
-                        serial.append(number)
+        if "million cycles" in line and j == c1:
+            if line[0] == '@':
+                print_debug(line, True, perf_log)
+            else:
+                line = line.replace("]","[")
+                line = line.split("[")
+                number = float(line[3])
+                if "tasks" in line[1]:
+                    absolute_tasks.append(number)
+                elif "ispc" in line[1]:
+                    absolute_ispc.append(number)
+                if "serial" in line[1]:
+                    serial.append(number)
 
-    if len(ispc) != 0:
-        if len(tasks) != 0:
+    if ispc:
+        if tasks:
             print_debug("ISPC speedup / ISPC + tasks speedup / ISPC time / ISPC + tasks time / serial time\n", s, perf_log)
             for i in range(0,len(serial)):
                 print_debug("%10s   /\t%10s\t    /%9s  /    %10s\t    /%10s\n" %
@@ -84,11 +81,10 @@ def analyse_test(c1, c2, test, b_serial, perf_temp_n):
             print_debug("ISPC speedup / ISPC time / serial time\n", s, perf_log)
             for i in range(0,len(serial)):
                 print_debug("%10s   /%9s  /%10s\n" % (ispc[i], absolute_ispc[i], serial[i]), s, perf_log)
-    else:
-        if len(tasks) != 0:
-            print_debug("ISPC + tasks speedup / ISPC + tasks time / serial time\n", s, perf_log)
-            for i in range(0,len(serial)):
-                print_debug("%10s\t     /    %10s\t /%10s\n" % (tasks[i], absolute_tasks[i], serial[i]), s, perf_log)
+    elif tasks:
+        print_debug("ISPC + tasks speedup / ISPC + tasks time / serial time\n", s, perf_log)
+        for i in range(0,len(serial)):
+            print_debug("%10s\t     /    %10s\t /%10s\n" % (tasks[i], absolute_tasks[i], serial[i]), s, perf_log)
 
     test[1] = test[1] + ispc
     test[2] = test[2] + tasks
@@ -99,9 +95,8 @@ def analyse_test(c1, c2, test, b_serial, perf_temp_n):
         test[5] = test[5] + serial
 
 def cpu_get():
-    p = open("/proc/stat", 'r')
-    cpu = p.readline()
-    p.close()
+    with open("/proc/stat", 'r') as p:
+        cpu = p.readline()
     cpu = cpu.split(" ")
     cpu_usage = (int(cpu[2]) + int(cpu[3]) + int(cpu[4]))
     cpu_all = cpu_usage + int(cpu[5])
@@ -125,9 +120,8 @@ def cpu_check():
             cpu_percent = float(R[1]) * 3
     else:
         os.system("wmic cpu get loadpercentage /value > cpu_temp")
-        c = open("cpu_temp", 'r')
-        c_lines = c.readlines()
-        c.close()
+        with open("cpu_temp", 'r') as c:
+            c_lines = c.readlines()
         os.remove("cpu_temp")
         t = "0"
         for i in c_lines[2]:
@@ -142,10 +136,7 @@ def geomean(par):
     l = len(par)
     for i in range(l):
         temp = temp * par[i]
-    if l != 0:
-        temp = temp ** (1.0/l)
-    else:
-        temp = 0
+    temp = temp ** (1.0/l) if l != 0 else 0
     return round(temp, 2)
 
 #takes an answer struct and print it.
@@ -165,8 +156,14 @@ def print_answer(answer, target_number):
     if target_number > 1:
         if options.output == "":
             options.output = "targets.csv"
-        filelist.append("test name,ISPC speedup" + "," * target_number + "ISPC + tasks speedup\n")
-        filelist.append("," + options.perf_target + "," + options.perf_target + "\n")
+        filelist.extend(
+            (
+                "test name,ISPC speedup"
+                + "," * target_number
+                + "ISPC + tasks speedup\n",
+                f",{options.perf_target},{options.perf_target}" + "\n",
+            )
+        )
     else:
         filelist.append("test name,ISPC speedup,diff," +
             "ISPC + tasks speedup,diff,ISPC time,diff,ISPC + tasks time,diff,serial,diff\n")
@@ -174,7 +171,7 @@ def print_answer(answer, target_number):
     diff_t = [0,0,0,0,0]
     geomean_t = []
     list_of_max = []
-    for i1 in range(target_number):
+    for _ in range(target_number):
         geomean_t.append([0,0,0,0,0])
         list_of_max.append([[],[],[],[],[]])
     list_of_compare = [[],[],[],[],[],[]]
@@ -189,10 +186,7 @@ def print_answer(answer, target_number):
                 diff_t[t-1] = "n/a"
                 list_of_compare[t].append(0);
             else:
-                if t < 3:
-                    mm = max(answer[i][t])
-                else:
-                    mm = min(answer[i][t])
+                mm = max(answer[i][t]) if t < 3 else min(answer[i][t])
                 list_of_compare[t].append(mm)
                 max_t[t-1] = '%.2f' % mm
                 list_of_max[i % target_number][t-1].append(mm)
@@ -209,19 +203,21 @@ def print_answer(answer, target_number):
                 diff_t[t] = ""
         if target_number > 1:
             if target_k == 0:
-                temp_str_1 = answer[i][0] + ","
+                temp_str_1 = f"{answer[i][0]},"
                 temp_str_2 = ""
-            temp_str_1 += max_t[0] + ","
-            temp_str_2 += max_t[1] + ","
+            temp_str_1 += f"{max_t[0]},"
+            temp_str_2 += f"{max_t[1]},"
             target_k = target_k + 1
             if target_k == target_number:
                 filelist.append(temp_str_1 + temp_str_2[:-1] + "\n")
                 target_k = 0
         else:
-            filelist.append(answer[i][0] + "," +
-                        max_t[0] + "," + diff_t[0] + "," +  max_t[1] + "," + diff_t[1] + "," +
-                        max_t[2] + "," + diff_t[2] + "," +  max_t[3] + "," + diff_t[3] + "," +
-                        max_t[4] + "," + diff_t[4] + "\n")
+            filelist.append(
+                (
+                    f"{answer[i][0]},{max_t[0]},{diff_t[0]},{max_t[1]},{diff_t[1]},{max_t[2]},{diff_t[2]},{max_t[3]},{diff_t[3]},{max_t[4]},{diff_t[4]}"
+                    + "\n"
+                )
+            )
     for i in range(0,5):
         for i1 in range(target_number):
             geomean_t[i1][i] = geomean(list_of_max[i1][i])
@@ -232,12 +228,16 @@ def print_answer(answer, target_number):
         temp_str_1 = "Geomean,"
         temp_str_2 = ""
         for i in range(target_number):
-            temp_str_1 += str(geomean_t[i][0]) + ","
-            temp_str_2 += str(geomean_t[i][1]) + ","
+            temp_str_1 += f"{str(geomean_t[i][0])},"
+            temp_str_2 += f"{str(geomean_t[i][1])},"
         filelist.append(temp_str_1 + temp_str_2[:-1] + "\n")
     else:
-        filelist.append("Geomean," + str(geomean_t[0][0]) + ",," + str(geomean_t[0][1])
-            + ",," + str(geomean_t[0][2]) + ",," + str(geomean_t[0][3]) + ",," + str(geomean_t[0][4]) + "\n")
+        filelist.append(
+            (
+                f"Geomean,{str(geomean_t[0][0])},,{str(geomean_t[0][1])},,{str(geomean_t[0][2])},,{str(geomean_t[0][3])},,{str(geomean_t[0][4])}"
+                + "\n"
+            )
+        )
     print_file(filelist)
     return list_of_compare
 
@@ -246,10 +246,7 @@ def compare(A, B):
     print_debug("\n\n_____________________PERFORMANCE REPORT____________________________\n", False, "")
     print_debug("test name:                 ISPC time: ISPC time ref: %:\n", False, "")
     for i in range(0,len(A[0])):
-        if B[3][i] == 0:
-            p1 = 0
-        else:
-            p1 = 100 - 100 * A[3][i]/B[3][i]
+        p1 = 0 if B[3][i] == 0 else 100 - 100 * A[3][i]/B[3][i]
         print_debug("%21s:  %10.2f %10.2f %10.2f" % (A[0][i], A[3][i], B[3][i], abs(p1)), False, "")
         if p1 < -1:
             print_debug(" <+", False, "")
@@ -260,10 +257,7 @@ def compare(A, B):
 
     print_debug("test name:                 TASKS time: TASKS time ref: %:\n", False, "")
     for i in range(0,len(A[0])):
-        if B[4][i] == 0:
-            p2 = 0
-        else:
-            p2 = 100 - 100 * A[4][i]/B[4][i]
+        p2 = 0 if B[4][i] == 0 else 100 - 100 * A[4][i]/B[4][i]
         print_debug("%21s:  %10.2f %10.2f %10.2f" % (A[0][i], A[4][i], B[4][i], abs(p2)), False, "")
         if p2 < -1:
             print_debug(" <+", False, "")

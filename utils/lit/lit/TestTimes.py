@@ -21,7 +21,7 @@ def record_test_times(tests, lit_config):
         assert t.suite.test_times is None
         if not t.result.elapsed:
             continue
-        if not t.suite.exec_root in times_by_suite:
+        if t.suite.exec_root not in times_by_suite:
             times_by_suite[t.suite.exec_root] = read_test_times(t.suite)
         time = -t.result.elapsed if t.isFailure() else t.result.elapsed
         # The "path" here is only used as a key into a dictionary. It is never
@@ -37,5 +37,5 @@ def record_test_times(tests, lit_config):
                 for name, time in value.items():
                     time_file.write(("%e" % time) + ' ' + name + '\n')
         except:
-            lit_config.warning('Could not save test time: ' + path)
+            lit_config.warning(f'Could not save test time: {path}')
             continue

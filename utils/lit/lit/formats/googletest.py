@@ -21,7 +21,7 @@ class GoogleTest(TestFormat):
             exe_suffix += '.exe'
 
         # Also check for .py files for testing purposes.
-        self.test_suffixes = {exe_suffix, test_suffix + '.py'}
+        self.test_suffixes = {exe_suffix, f'{test_suffix}.py'}
         self.run_under = run_under
 
     def getGTestTests(self, path, litConfig, localConfig):
@@ -81,8 +81,7 @@ class GoogleTest(TestFormat):
             ln = ln[index*2:]
             if ln.endswith('.'):
                 nested_tests.append(ln)
-            elif any([name.startswith('DISABLED_')
-                      for name in nested_tests + [ln]]):
+            elif any(name.startswith('DISABLED_') for name in nested_tests + [ln]):
                 # Gtest will internally skip these tests. No need to launch a
                 # child process for it.
                 continue
@@ -112,9 +111,9 @@ class GoogleTest(TestFormat):
             # Handle GTest parametrized and typed tests, whose name includes
             # some '/'s.
             testPath, namePrefix = os.path.split(testPath)
-            testName = namePrefix + '/' + testName
+            testName = f'{namePrefix}/{testName}'
 
-        cmd = [testPath, '--gtest_filter=' + testName]
+        cmd = [testPath, f'--gtest_filter={testName}']
         cmd = self.prepareCmd(cmd)
         if litConfig.useValgrind:
             cmd = litConfig.valgrindArgs + cmd
