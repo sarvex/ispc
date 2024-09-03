@@ -224,7 +224,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm13_linux
 
@@ -264,7 +264,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm14_linux
 
@@ -305,7 +305,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm15_linux
 
@@ -344,7 +344,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm15rel_linux
 
@@ -386,7 +386,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm15_linux
 
@@ -599,7 +599,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm13_win
 
@@ -645,7 +645,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm14_win
 
@@ -692,7 +692,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm15_win
 
