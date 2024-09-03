@@ -70,7 +70,7 @@ jobs:
         cat /proc/cpuinfo
 
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: llvm_linux_x86_stage1_cache
         path: docker/ubuntu/${{ inputs.ubuntu }}/cpu_ispc_build/cache.local
@@ -133,7 +133,7 @@ jobs:
         cat /proc/cpuinfo
 
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: llvmrel_linux_x86_stage1_cache
         path: docker/ubuntu/${{ inputs.ubuntu }}/cpu_ispc_build/cache.local

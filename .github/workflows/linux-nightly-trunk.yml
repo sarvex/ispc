@@ -58,7 +58,7 @@ jobs:
         cat /proc/cpuinfo
 
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: llvm_trunk_linux_stage1_cache
         path: docker/ubuntu/18.04/cpu_ispc_build/cache.local
@@ -97,7 +97,7 @@ jobs:
         submodules: true
 
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: llvm_trunk_linux
 
@@ -141,7 +141,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download package
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4.1.7
       with:
         name: ispc_llvm_trunk_linux
 
